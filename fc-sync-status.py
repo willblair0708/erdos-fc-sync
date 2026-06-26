@@ -193,6 +193,12 @@ rows = [(n, action(n), erdos[n].get("status", {}).get("state", "?")) for n in so
 
 from collections import Counter
 counts = Counter(a for _, a, _ in rows)
+
+# completeness monitor: problems Bloom marks formalized that none of our sources track.
+# a nonzero gap means a new proof collection has appeared and is worth ingesting.
+bloom_formalized = {n for n in erdos
+                    if (erdos[n].get("formalized") or {}).get("state") == "yes"}
+gap = sorted(bloom_formalized - (set(proofs) | set(fc)))
 ORDER = ["statement", "link", "docstring", "partial", "in-pr", "wont-fix", "done", "no-proof"]
 DESC = {
     "statement": "**Write the FC statement + link.** A complete hosted proof exists, FC has no file yet. The #3998 batch.",
@@ -229,6 +235,14 @@ def md():
         out.append("> ⚠️ The open-PR (claims) layer did not run this time (no token / rate limit), "
                    "so `in-pr` may be undercounted.\n")
     out.append(f"Reconciled **{len(rows)}** problems.\n")
+    if gap:
+        out.append(f"> ⚠️ **Coverage gap: {len(gap)}** of {len(bloom_formalized)} problems Bloom marks "
+                   "formalized are tracked by none of the sources here, so a new proof collection "
+                   "may have appeared and is worth ingesting. Investigate: "
+                   + " ".join(f"[{n}]({EPC}/{n})" for n in gap) + "\n")
+    else:
+        out.append(f"**Coverage:** all {len(bloom_formalized)} problems Bloom marks formalized are "
+                   "tracked here (plby ∪ Jayyhk ∪ FC). No gap.\n")
     out.append("| status | count | meaning |\n|---|---:|---|")
     for a in ORDER:
         out.append(f"| `{a}` | {counts.get(a,0)} | {DESC[a]} |")

@@ -12,6 +12,8 @@ It also folds in the live set of open FC pull requests, so it never points at in
 
 Reconciled **1217** problems.
 
+**Coverage:** all 469 problems Bloom marks formalized are tracked here (plby ∪ Jayyhk ∪ FC). No gap.
+
 | status | count | meaning |
 |---|---:|---|
 | `statement` | 93 | **Write the FC statement + link.** A complete hosted proof exists, FC has no file yet. The #3998 batch. |
