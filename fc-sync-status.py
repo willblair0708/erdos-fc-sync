@@ -7,18 +7,19 @@ that update independently:
 
   * erdosproblems.com (Bloom's upstream status)
   * the Formal Conjectures repo (each file's @[category ...] annotation + formal_proof)
-  * plby/lean-proofs (which solved problems have a hosted Lean proof, and whether it
-    is conditional)
+  * the proof collections that host Lean proofs of solved problems
+    (plby/lean-proofs and Jayyhk/erdos-lean), and whether each proof is conditional
 
 Reconciling those by hand is what drifts. This script computes the status instead, by
-joining the three machine-readable sources on the problem number, plus the live set of
-open FC pull requests so it never points anyone at in-flight work. It writes STATUS.md.
+joining the machine-readable sources on the problem number, plus the live set of open
+FC pull requests so it never points anyone at in-flight work. It writes STATUS.md.
 
 Sources (all fetched fresh):
-  fc     https://google-deepmind.github.io/formal-conjectures/data/conjectures.json
-  erdos  https://raw.githubusercontent.com/teorth/erdosproblems/main/data/problems.yaml
-  plby   https://raw.githubusercontent.com/plby/lean-proofs/main/data/sources.yaml
-  claims github.com/google-deepmind/formal-conjectures open PRs (REST API)
+  fc      https://google-deepmind.github.io/formal-conjectures/data/conjectures.json
+  erdos   https://raw.githubusercontent.com/teorth/erdosproblems/main/data/problems.yaml
+  plby    https://raw.githubusercontent.com/plby/lean-proofs/main/data/sources.yaml
+  jayyhk  https://raw.githubusercontent.com/Jayyhk/erdos-lean/main/data/problems.yaml
+  claims  github.com/google-deepmind/formal-conjectures open PRs (REST API)
 
 Run: python fc-sync-status.py            (writes STATUS.md, prints the summary)
 A GitHub token in GH_TOKEN / GITHUB_TOKEN lets the open-PR (claims) layer run.
@@ -32,7 +33,9 @@ TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
 CONJ_URL = "https://google-deepmind.github.io/formal-conjectures/data/conjectures.json"
 ERDOS_URL = "https://raw.githubusercontent.com/teorth/erdosproblems/main/data/problems.yaml"
 PLBY_URL = "https://raw.githubusercontent.com/plby/lean-proofs/main/data/sources.yaml"
+JAYY_URL = "https://raw.githubusercontent.com/Jayyhk/erdos-lean/main/data/problems.yaml"
 REPO = "google-deepmind/formal-conjectures"
+SRC_TAG = {"plby": "ᵖ", "jayyhk": "ʲ"}
 
 
 def fetch(url, headers=None):
@@ -44,16 +47,30 @@ def fetch(url, headers=None):
 # --- erdos upstream status ------------------------------------------------
 erdos = {int(p["number"]): p for p in yaml.safe_load(fetch(ERDOS_URL))}
 
-# --- plby hosted proofs (presence => hosted; partial/conditional => not complete) --
-plby = {}
+# --- hosted proofs: union of plby and Jayyhk ------------------------------
+# presence => a proof is hosted; only a non-conditional / `complete` proof counts
+# as complete (an axiomatic / trust-extended / partial proof is not).
+proofs = {}  # n -> {"complete": bool, "sources": set}
+
+
+def add_proof(n, complete, source):
+    rec = proofs.setdefault(n, {"complete": False, "sources": set()})
+    rec["complete"] = rec["complete"] or complete
+    rec["sources"].add(source)
+
+
 for e in yaml.safe_load(fetch(PLBY_URL)):
     m = re.search(r"Erdos(\d+)", e.get("key", ""))
-    if not m:
+    if m:
+        add_proof(int(m.group(1)), not (e.get("partial") or e.get("conditional")), "plby")
+
+for e in yaml.safe_load(fetch(JAYY_URL)):
+    try:
+        n = int(e["number"])
+    except (KeyError, ValueError, TypeError):
         continue
-    n = int(m.group(1))
-    complete = not (e.get("partial") or e.get("conditional"))
-    rec = plby.setdefault(n, {"hosted": True, "complete": False})
-    rec["complete"] = rec["complete"] or complete
+    state = (e.get("proof") or {}).get("state")
+    add_proof(n, state == "complete", "jayyhk")  # axiomatic / trust_extended => not complete
 
 # --- FC view: has a file? has a formal_proof link? ------------------------
 conj = json.loads(fetch(CONJ_URL))
@@ -70,6 +87,7 @@ for e in entries:
     rec = fc.setdefault(int(m.group(1)), {"has_file": True, "linked": False})
     if e.get("hasFormalProof") and e.get("formalProofLink"):
         rec["linked"] = True
+
 
 # --- claims: numbers touched by an open FC pull request -------------------
 def get_claims():
@@ -102,7 +120,7 @@ claimed, claims_available = get_claims()
 
 def action(n):
     f = fc.get(n, {"has_file": False, "linked": False})
-    p = plby.get(n)
+    p = proofs.get(n)
     if f["linked"]:
         return "done"
     if not p:
@@ -116,6 +134,11 @@ def action(n):
     return "statement"
 
 
+def srcs(n):
+    s = proofs.get(n, {}).get("sources", set())
+    return "".join(SRC_TAG[k] for k in ("plby", "jayyhk") if k in s)
+
+
 rows = [(n, action(n), erdos[n].get("status", {}).get("state", "?")) for n in sorted(erdos)]
 
 from collections import Counter
@@ -124,12 +147,11 @@ ORDER = ["statement", "link", "docstring", "in-pr", "done", "no-proof"]
 DESC = {
     "statement": "**Write the FC statement + link.** A complete hosted proof exists, FC has no file yet. The #3998 batch.",
     "link":      "**Add the `formal_proof` link.** FC already has the statement; the hosted proof just isn't linked.",
-    "docstring": "**Docstring note, not a `formal_proof` tag.** The hosted proof is conditional or partial.",
+    "docstring": "**Docstring note, not a `formal_proof` tag.** The hosted proof is conditional, axiomatic, or trust-extended.",
     "in-pr":     "**Claimed.** An open FC pull request already touches this file.",
     "done":      "Already linked in FC.",
     "no-proof":  "No hosted Lean proof to link (nothing to do here yet).",
 }
-
 EPC = "https://www.erdosproblems.com"
 
 
@@ -140,15 +162,17 @@ def md():
     out.append(f"*Regenerated {today} by [`fc-sync-status.py`](fc-sync-status.py). "
                "Do not edit by hand.*\n")
     out.append(
-        "This is a **computed** view, not a hand-kept list. It joins three sources on the "
-        "problem number so the status can't drift:\n\n"
+        "This is a **computed** view, not a hand-kept list. It joins the machine-readable "
+        "sources on the problem number so the status can't drift:\n\n"
         "- [erdosproblems.com](https://www.erdosproblems.com) status "
         "([`problems.yaml`](https://github.com/teorth/erdosproblems/blob/main/data/problems.yaml))\n"
         "- Formal Conjectures' own [`conjectures.json`](https://google-deepmind.github.io/formal-conjectures/data/conjectures.json) "
         "(has-a-file + `formalProofLink`)\n"
-        "- [`plby/lean-proofs`](https://github.com/plby/lean-proofs/blob/main/data/sources.yaml) "
-        "(hosted proof + `conditional`/`partial`)\n\n"
-        "It also folds in the live set of open FC pull requests, so it never points at in-flight work.\n")
+        "- hosted proofs from [`plby/lean-proofs`](https://github.com/plby/lean-proofs/blob/main/data/sources.yaml) (ᵖ) "
+        "and [`Jayyhk/erdos-lean`](https://github.com/Jayyhk/erdos-lean/blob/main/data/problems.yaml) (ʲ), "
+        "with their `conditional` / `axiomatic` / `trust_extended` flags\n\n"
+        "It also folds in the live set of open FC pull requests, so it never points at in-flight work. "
+        "The ᵖ / ʲ marks after each problem show which collection hosts the proof.\n")
     if not claims_available:
         out.append("> ⚠️ The open-PR (claims) layer did not run this time (no token / rate limit), "
                    "so `in-pr` may be undercounted.\n")
@@ -160,7 +184,7 @@ def md():
     for a in ("statement", "link", "docstring"):
         ns = [n for n, x, _ in rows if x == a]
         out.append(f"\n## `{a}` — {len(ns)} problem(s)\n\n{DESC[a]}\n")
-        out.append(" ".join(f"[{n}]({EPC}/{n})" for n in ns) or "_none_")
+        out.append(" ".join(f"[{n}]({EPC}/{n}){srcs(n)}" for n in ns) or "_none_")
     out.append("")
     return "\n".join(out)
 
@@ -168,7 +192,8 @@ def md():
 with open("STATUS.md", "w") as f:
     f.write(md())
 
-print(f"reconciled {len(rows)} problems; claims_available={claims_available}")
+print(f"reconciled {len(rows)} problems; claims_available={claims_available}; "
+      f"hosted proofs tracked: {len(proofs)}")
 for a in ORDER:
     print(f"  {a:>10}: {counts.get(a,0)}")
 print("wrote STATUS.md")
