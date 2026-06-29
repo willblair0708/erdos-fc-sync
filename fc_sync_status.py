@@ -1,0 +1,628 @@
+#!/usr/bin/env python3
+"""Compute the Erdős ↔ Formal Conjectures proof-sync dashboard."""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import asdict, dataclass
+import datetime as _datetime
+import json
+import os
+from pathlib import Path
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import yaml
+
+
+UA = {"User-Agent": "erdos-fc-sync"}
+TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+
+CONJ_URL = "https://google-deepmind.github.io/formal-conjectures/data/conjectures.json"
+ERDOS_URL = "https://raw.githubusercontent.com/teorth/erdosproblems/main/data/problems.yaml"
+PLBY_URL = "https://raw.githubusercontent.com/plby/lean-proofs/main/data/sources.yaml"
+JAYY_URL = "https://raw.githubusercontent.com/Jayyhk/erdos-lean/main/data/problems.yaml"
+VLP_URL = "https://raw.githubusercontent.com/willblair0708/lean-proofs/main/proofs.yaml"
+FC_REPO = "google-deepmind/formal-conjectures"
+EPC = "https://www.erdosproblems.com"
+
+SOURCE_ORDER = ("plby", "jayyhk", "vlp")
+SRC_TAG = {"plby": "ᵖ", "jayyhk": "ʲ", "vlp": "ʷ"}
+SOURCE_LABEL = {
+    "plby": "plby/lean-proofs",
+    "jayyhk": "Jayyhk/erdos-lean",
+    "vlp": "willblair0708/lean-proofs",
+}
+
+BUCKET_ORDER = [
+    "statement",
+    "link",
+    "needs-statement-update",
+    "needs-human-match-check",
+    "mismatch",
+    "hypothesis-conditional",
+    "docstring",
+    "partial",
+    "blocked-claim",
+    "in-pr",
+    "wont-fix",
+    "defer",
+    "done",
+    "no-proof",
+]
+
+SECTION_ORDER = [
+    "statement",
+    "link",
+    "needs-statement-update",
+    "needs-human-match-check",
+    "mismatch",
+    "hypothesis-conditional",
+    "docstring",
+    "partial",
+    "blocked-claim",
+    "wont-fix",
+    "defer",
+]
+
+OVERRIDE_BUCKETS = {
+    "blocked-claim",
+    "wont-fix",
+    "mismatch",
+    "hypothesis-conditional",
+    "needs-human-match-check",
+    "needs-statement-update",
+    "defer",
+}
+
+BUCKET_DESC = {
+    "statement": "**Write the FC statement + link.** A complete hosted proof exists, FC has no file yet.",
+    "link": "**Add the `formal_proof` link.** FC already has the statement; the hosted proof just is not linked.",
+    "needs-statement-update": "**Not a trivial link.** FC has a file, but the statement or answer needs a human update before linking.",
+    "needs-human-match-check": "**Needs match-check.** A hosted proof exists, but the proof/statement relation has not been audited.",
+    "mismatch": "**Skip for now.** The hosted proof is complete, but it does not prove the boxed FC statement.",
+    "hypothesis-conditional": "**Do not link as complete.** The theorem carries a non-problem hypothesis even if `#print axioms` is clean.",
+    "docstring": "**Docstring note, not a `formal_proof` tag.** The hosted proof is conditional, axiomatic, or trust-extended.",
+    "partial": "**Partial proof.** Proves a variant, not the full erdosproblems statement.",
+    "blocked-claim": "**Claimed outside an open PR.** Skip until the claim is resolved.",
+    "in-pr": "**Claimed by an open FC PR.** Skip to avoid collisions.",
+    "wont-fix": "**Maintainer marked `won't fix`.** Skip.",
+    "defer": "**Deferred.** A human override says to leave this out of the next batch.",
+    "done": "Already linked in FC.",
+    "no-proof": "No hosted Lean proof to link yet.",
+}
+
+RECOMMENDED_ACTION = {
+    "statement": "Write the FC statement and link the matching hosted proof.",
+    "link": "Check theorem match, then add the formal_proof link.",
+    "needs-statement-update": "Review and update the FC statement before adding any link.",
+    "needs-human-match-check": "Read the hosted theorem and boxed problem before deciding whether to link.",
+    "mismatch": "Skip until a hosted proof matches the boxed FC statement.",
+    "hypothesis-conditional": "Do not add a formal_proof link; document or wait for an unconditional theorem.",
+    "docstring": "Add only a docstring note if useful; do not add formal_proof.",
+    "partial": "Only link a correctly stated variant after a per-problem review.",
+    "blocked-claim": "Skip because a human claim exists outside an open PR.",
+    "in-pr": "Skip because an open PR already touches this problem.",
+    "wont-fix": "Skip.",
+    "defer": "Skip this batch.",
+    "done": "No action.",
+    "no-proof": "No action until a hosted proof appears.",
+}
+
+
+@dataclass(frozen=True)
+class Claim:
+    number: int
+    title: str
+    url: str
+    head_ref: str
+
+
+def fetch(url: str, headers: dict[str, str] | None = None) -> bytes:
+    req = urllib.request.Request(url, headers={**UA, **(headers or {})})
+    with urllib.request.urlopen(req, timeout=90) as response:
+        return response.read()
+
+
+def load_yaml_url(url: str):
+    return yaml.safe_load(fetch(url))
+
+
+def load_json_url(url: str):
+    return json.loads(fetch(url))
+
+
+def proof_url(source: str, problem: int, entry: dict | None = None) -> str:
+    if source == "plby":
+        return f"https://github.com/plby/lean-proofs/blob/main/src/v4.29.1/ErdosProblems/Erdos{problem}.lean"
+    if source == "jayyhk":
+        return f"https://github.com/Jayyhk/erdos-lean/blob/main/problems/{problem}/Erdos{problem}.lean"
+    if source == "vlp":
+        file = (entry or {}).get("file") or f"ErdosProblems/Erdos{problem}.lean"
+        return f"https://github.com/willblair0708/lean-proofs/blob/main/{file}"
+    raise ValueError(f"unknown proof source: {source}")
+
+
+def add_proof(
+    proofs: dict[int, dict],
+    problem: int,
+    *,
+    complete: bool,
+    conditional: bool,
+    partial: bool,
+    source: str,
+    url: str,
+    state: str | None = None,
+) -> None:
+    rec = proofs.setdefault(
+        problem,
+        {"complete": False, "conditional": False, "partial": False, "sources": {}},
+    )
+    rec["complete"] |= complete
+    rec["conditional"] |= conditional
+    rec["partial"] |= partial
+    rec["sources"][source] = {
+        "complete": complete,
+        "conditional": conditional,
+        "partial": partial,
+        "url": url,
+        "state": state,
+    }
+
+
+def build_proofs(
+    plby_items: list[dict] | None,
+    jayyhk_items: list[dict] | None,
+    vlp_doc: dict | None,
+) -> dict[int, dict]:
+    proofs: dict[int, dict] = {}
+    for entry in plby_items or []:
+        match = re.search(r"Erdos(\d+)", entry.get("key", ""))
+        if not match:
+            continue
+        problem = int(match.group(1))
+        conditional = "conditional" in entry
+        partial = "partial" in entry
+        add_proof(
+            proofs,
+            problem,
+            complete=not (conditional or partial),
+            conditional=conditional,
+            partial=partial,
+            source="plby",
+            url=proof_url("plby", problem, entry),
+            state="partial" if partial else "conditional" if conditional else "complete",
+        )
+
+    for entry in jayyhk_items or []:
+        try:
+            problem = int(entry["number"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        state = (entry.get("proof") or {}).get("state")
+        add_proof(
+            proofs,
+            problem,
+            complete=state == "complete",
+            conditional=state in ("axiomatic", "trust_extended"),
+            partial=False,
+            source="jayyhk",
+            url=proof_url("jayyhk", problem, entry),
+            state=state,
+        )
+
+    for entry in (vlp_doc or {}).get("proofs", []):
+        try:
+            problem = int(entry["problem"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        clean = bool(entry.get("axioms_clean"))
+        add_proof(
+            proofs,
+            problem,
+            complete=clean,
+            conditional=not clean,
+            partial=False,
+            source="vlp",
+            url=proof_url("vlp", problem, entry),
+            state="axioms_clean" if clean else "not_clean",
+        )
+    return proofs
+
+
+def build_fc(conjectures: dict) -> dict[int, dict]:
+    entries = []
+    for value in conjectures.values():
+        entries.extend(value if isinstance(value, list) else [value])
+    fc: dict[int, dict] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("githubPath") or ""
+        match = re.search(r"ErdosProblems/(\d+)\.lean", path)
+        if not match:
+            continue
+        problem = int(match.group(1))
+        rec = fc.setdefault(problem, {"has_file": True, "linked": False, "path": path, "formal_proof_link": None})
+        rec["has_file"] = True
+        rec["path"] = rec.get("path") or path
+        if entry.get("hasFormalProof") and entry.get("formalProofLink"):
+            rec["linked"] = True
+            rec["formal_proof_link"] = entry.get("formalProofLink")
+    return fc
+
+
+def claims_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
+
+def fetch_claims() -> tuple[dict[int, list[Claim]], bool]:
+    claims_by_problem: dict[int, list[Claim]] = {}
+    headers = claims_headers()
+    try:
+        page = 1
+        prs = []
+        while True:
+            batch = json.loads(
+                fetch(f"https://api.github.com/repos/{FC_REPO}/pulls?state=open&per_page=100&page={page}", headers)
+            )
+            prs.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        for pr in prs:
+            files = json.loads(fetch(pr["url"] + "/files?per_page=100", headers))
+            claim = Claim(
+                number=int(pr["number"]),
+                title=pr.get("title") or "",
+                url=pr.get("html_url") or "",
+                head_ref=(pr.get("head") or {}).get("ref") or "",
+            )
+            for file in files:
+                match = re.search(r"ErdosProblems/(\d+)\.lean", file.get("filename", ""))
+                if match:
+                    claims_by_problem.setdefault(int(match.group(1)), []).append(claim)
+        return claims_by_problem, True
+    except (urllib.error.HTTPError, urllib.error.URLError, KeyError, json.JSONDecodeError):
+        return {}, False
+
+
+def fetch_wontfix() -> set[int]:
+    problems: set[int] = set()
+    headers = claims_headers()
+    try:
+        page = 1
+        while True:
+            url = (
+                f"https://api.github.com/repos/{FC_REPO}/issues?state=all&labels="
+                + urllib.parse.quote("won't fix")
+                + f"&per_page=100&page={page}"
+            )
+            batch = json.loads(fetch(url, headers))
+            if not batch:
+                break
+            for issue in batch:
+                if issue.get("pull_request"):
+                    continue
+                match = re.search(r"Problem (\d+)", issue.get("title", ""))
+                if match:
+                    problems.add(int(match.group(1)))
+            if len(batch) < 100:
+                break
+            page += 1
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+        pass
+    return problems
+
+
+def load_overrides(path: str | Path = "overrides.yaml") -> dict[int, dict]:
+    override_path = Path(path)
+    if not override_path.exists():
+        return {}
+    raw = yaml.safe_load(override_path.read_text()) or {}
+    overrides: dict[int, dict] = {}
+    for key, value in raw.items():
+        try:
+            problem = int(key)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(value, dict):
+            continue
+        bucket = value.get("bucket")
+        if bucket and bucket not in OVERRIDE_BUCKETS:
+            raise ValueError(f"unknown override bucket for {problem}: {bucket}")
+        overrides[problem] = value
+    return overrides
+
+
+def source_names(proof: dict | None) -> list[str]:
+    if not proof:
+        return []
+    sources = proof.get("sources", {})
+    return [source for source in SOURCE_ORDER if source in sources]
+
+
+def source_tags(proof: dict | None) -> str:
+    return "".join(SRC_TAG[source] for source in source_names(proof))
+
+
+def classify(problem: int, fc: dict, proof: dict | None, claims: list[Claim], override: dict | None) -> str:
+    if fc.get("linked"):
+        return "done"
+    if override and override.get("bucket") in OVERRIDE_BUCKETS:
+        return override["bucket"]
+    if claims:
+        return "in-pr"
+    if not proof:
+        return "no-proof"
+    if proof.get("complete"):
+        return "link" if fc.get("has_file") else "statement"
+    if proof.get("conditional"):
+        return "docstring"
+    if proof.get("partial"):
+        return "partial"
+    return "needs-human-match-check"
+
+
+def row_for_problem(
+    problem: int,
+    erdos_record: dict,
+    fc_record: dict | None,
+    proof: dict | None,
+    claims: list[Claim],
+    override: dict | None,
+) -> dict:
+    fc_data = fc_record or {"has_file": False, "linked": False, "path": None, "formal_proof_link": None}
+    bucket = classify(problem, fc_data, proof, claims, override)
+    sources = source_names(proof)
+    proof_links = []
+    if proof:
+        for source in sources:
+            data = proof["sources"][source]
+            proof_links.append(
+                {
+                    "source": source,
+                    "label": SOURCE_LABEL[source],
+                    "url": data["url"],
+                    "state": data.get("state"),
+                    "complete": data["complete"],
+                    "conditional": data["conditional"],
+                    "partial": data["partial"],
+                }
+            )
+    return {
+        "problem": problem,
+        "bucket": bucket,
+        "erdos_url": f"{EPC}/{problem}",
+        "latex_url": f"{EPC}/latex/{problem}",
+        "erdos_state": ((erdos_record.get("status") or {}).get("state") or "?"),
+        "proof_sources": sources,
+        "proof_links": proof_links,
+        "source_tags": source_tags(proof),
+        "fc": {
+            "has_file": bool(fc_data.get("has_file")),
+            "linked": bool(fc_data.get("linked")),
+            "path": fc_data.get("path"),
+            "formal_proof_link": fc_data.get("formal_proof_link"),
+        },
+        "claims": [asdict(claim) for claim in claims],
+        "override": override or None,
+        "recommended_action": (override or {}).get("recommended_action") or RECOMMENDED_ACTION[bucket],
+    }
+
+
+def build_status(
+    *,
+    erdos: dict[int, dict],
+    fc: dict[int, dict],
+    proofs: dict[int, dict],
+    claims_by_problem: dict[int, list[Claim]],
+    claims_available: bool,
+    overrides: dict[int, dict],
+    generated_at: str | None = None,
+) -> dict:
+    generated_at = generated_at or _datetime.date.today().isoformat()
+    rows = [
+        row_for_problem(
+            problem,
+            erdos[problem],
+            fc.get(problem),
+            proofs.get(problem),
+            claims_by_problem.get(problem, []),
+            overrides.get(problem),
+        )
+        for problem in sorted(erdos)
+    ]
+    counts = Counter(row["bucket"] for row in rows)
+    bloom_formalized = {
+        problem
+        for problem, data in erdos.items()
+        if ((data.get("formalized") or {}).get("state") == "yes")
+    }
+    coverage_gap = sorted(bloom_formalized - (set(proofs) | set(fc)))
+    return {
+        "generated_at": generated_at,
+        "claims_available": claims_available,
+        "sources": {
+            "formal_conjectures": CONJ_URL,
+            "erdosproblems": ERDOS_URL,
+            "plby": PLBY_URL,
+            "jayyhk": JAYY_URL,
+            "vlp": VLP_URL,
+            "fc_repo": FC_REPO,
+        },
+        "counts": {bucket: counts.get(bucket, 0) for bucket in BUCKET_ORDER},
+        "total_problems": len(rows),
+        "hosted_proofs_tracked": len(proofs),
+        "bloom_formalized_count": len(bloom_formalized),
+        "coverage_gap": coverage_gap,
+        "rows": rows,
+    }
+
+
+def format_problem_inline(row: dict) -> str:
+    text = f"[{row['problem']}]({row['erdos_url']}){row['source_tags']}"
+    if row["claims"]:
+        links = ", ".join(f"[#{claim['number']}]({claim['url']})" for claim in row["claims"])
+        text += f" ({links})"
+    return text
+
+
+def format_problem_detail(row: dict) -> str:
+    parts = [format_problem_inline(row)]
+    override = row.get("override")
+    if override and override.get("reason"):
+        parts.append(override["reason"])
+    elif row["claims"]:
+        parts.append("; ".join(f"#{claim['number']} {claim['title']}" for claim in row["claims"]))
+    else:
+        parts.append(row["recommended_action"])
+    return " — ".join(parts)
+
+
+def render_status_md(payload: dict) -> str:
+    out: list[str] = []
+    out.append("# Erdős ↔ Formal Conjectures sync status\n")
+    out.append(f"*Regenerated {payload['generated_at']} by [`fc-sync-status.py`](fc-sync-status.py). Do not edit by hand.*\n")
+    out.append(
+        "This is a **computed** view, not a hand-kept list. It joins erdosproblems.com, "
+        "Formal Conjectures, hosted Lean proof indexes, live open PRs, and explicit human "
+        "overrides on the problem number so the status cannot drift silently.\n"
+    )
+    out.append(
+        "Proof-source marks: ᵖ = [`plby/lean-proofs`](https://github.com/plby/lean-proofs), "
+        "ʲ = [`Jayyhk/erdos-lean`](https://github.com/Jayyhk/erdos-lean), "
+        "ʷ = [`willblair0708/lean-proofs`](https://github.com/willblair0708/lean-proofs).\n"
+    )
+    if not payload["claims_available"]:
+        out.append("> ⚠️ The open-PR claims layer did not run this time, so `in-pr` may be undercounted.\n")
+    if payload["coverage_gap"]:
+        links = " ".join(f"[{problem}]({EPC}/{problem})" for problem in payload["coverage_gap"])
+        out.append(f"> ⚠️ **Coverage gap:** investigate {links}\n")
+    else:
+        out.append(
+            f"**Coverage:** all {payload['bloom_formalized_count']} problems Bloom marks formalized are tracked "
+            "by plby ∪ Jayyhk ∪ willblair0708/lean-proofs ∪ FC. No gap.\n"
+        )
+    out.append(f"Reconciled **{payload['total_problems']}** problems.\n")
+    out.append("| status | count | meaning |\n|---|---:|---|")
+    for bucket in BUCKET_ORDER:
+        out.append(f"| `{bucket}` | {payload['counts'].get(bucket, 0)} | {BUCKET_DESC[bucket]} |")
+    out.append(
+        "\nHuman override judgments live in [`overrides.yaml`](overrides.yaml). They encode known "
+        "claims, theorem mismatches, and conditional-proof traps that are not visible in the upstream "
+        "machine-readable sources.\n"
+    )
+
+    rows_by_bucket: dict[str, list[dict]] = {bucket: [] for bucket in BUCKET_ORDER}
+    for row in payload["rows"]:
+        rows_by_bucket.setdefault(row["bucket"], []).append(row)
+
+    for bucket in SECTION_ORDER:
+        rows = rows_by_bucket.get(bucket, [])
+        out.append(f"\n## `{bucket}` — {len(rows)} problem(s)\n\n{BUCKET_DESC[bucket]}\n")
+        if not rows:
+            out.append("_none_")
+        elif bucket in {"statement", "link", "docstring", "partial"}:
+            out.append(" ".join(format_problem_inline(row) for row in rows))
+        else:
+            out.extend(f"- {format_problem_detail(row)}" for row in rows)
+    out.append("")
+    return "\n".join(out)
+
+
+def batch_rank(row: dict) -> tuple[int, int, int]:
+    sources = set(row["proof_sources"])
+    both_main_sources = "plby" in sources and "jayyhk" in sources
+    return (0 if both_main_sources else 1, -len(sources), row["problem"])
+
+
+def safe_statement_rows(payload: dict) -> list[dict]:
+    rows = [row for row in payload["rows"] if row["bucket"] == "statement"]
+    return sorted(rows, key=batch_rank)
+
+
+def render_next_batch_md(payload: dict, *, top_count: int = 20, batch_size: int = 8) -> str:
+    rows = safe_statement_rows(payload)
+    top = rows[:top_count]
+    batch = top[:batch_size]
+    out: list[str] = []
+    out.append("# Next Erdős FC Sync Batch\n")
+    out.append(f"*Generated {payload['generated_at']} from [`status.json`](status.json).*\n")
+    out.append(
+        "This file lists safe `statement` candidates only: no open PR claim, no human override, "
+        "and at least one complete hosted proof source.\n"
+    )
+    out.append(f"## Suggested Batch — {len(batch)} problem(s)\n")
+    out.append(" ".join(format_problem_inline(row) for row in batch) or "_none_")
+    out.append(f"\n## Top {len(top)} Safe Candidates\n")
+    for row in top:
+        out.append(f"### Problem {row['problem']}{row['source_tags']}\n")
+        out.append(f"- Problem: {row['erdos_url']}")
+        out.append(f"- LaTeX: {row['latex_url']}")
+        for link in row["proof_links"]:
+            out.append(f"- {link['label']}: {link['url']}")
+        out.append("- Anti-collision:")
+        out.append("```bash")
+        out.append(
+            f'gh pr list -R {FC_REPO} --search "ErdosProblems/{row["problem"]}" --state all'
+        )
+        out.append(f'gh issue list -R {FC_REPO} --search "{row["problem"]}"')
+        out.append("```\n")
+    out.append("")
+    return "\n".join(out)
+
+
+def write_outputs(payload: dict, root: str | Path = ".") -> None:
+    root = Path(root)
+    (root / "STATUS.md").write_text(render_status_md(payload))
+    (root / "NEXT_BATCH.md").write_text(render_next_batch_md(payload))
+    (root / "status.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
+    erdos = {int(problem["number"]): problem for problem in load_yaml_url(ERDOS_URL)}
+    plby_items = load_yaml_url(PLBY_URL)
+    jayyhk_items = load_yaml_url(JAYY_URL)
+    try:
+        vlp_doc = load_yaml_url(VLP_URL) or {}
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        vlp_doc = {}
+    proofs = build_proofs(plby_items, jayyhk_items, vlp_doc)
+    fc = build_fc(load_json_url(CONJ_URL))
+    claims_by_problem, claims_available = fetch_claims()
+    overrides = load_overrides(overrides_path)
+    for problem in fetch_wontfix():
+        overrides.setdefault(
+            problem,
+            {
+                "bucket": "wont-fix",
+                "reason": "Formal Conjectures issue is labelled won't fix.",
+                "source": f"https://github.com/{FC_REPO}/issues?q={problem}+label%3A%22won%27t+fix%22",
+            },
+        )
+    return build_status(
+        erdos=erdos,
+        fc=fc,
+        proofs=proofs,
+        claims_by_problem=claims_by_problem,
+        claims_available=claims_available,
+        overrides=overrides,
+    )
+
+
+def main() -> int:
+    payload = load_live_status()
+    write_outputs(payload)
+    print(
+        f"reconciled {payload['total_problems']} problems; "
+        f"claims_available={payload['claims_available']}; "
+        f"hosted proofs tracked={payload['hosted_proofs_tracked']}"
+    )
+    for bucket in BUCKET_ORDER:
+        print(f"  {bucket:>24}: {payload['counts'].get(bucket, 0)}")
+    print("wrote STATUS.md, status.json, NEXT_BATCH.md")
+    return 0
+

@@ -1,0 +1,18 @@
+[project]
+name = "erdos-fc-sync"
+version = "0.1.0"
+description = "Computed dashboard for syncing hosted Erdős Lean proofs into Formal Conjectures."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
