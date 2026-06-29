@@ -1,11 +1,13 @@
-# Human judgments that cannot be inferred from upstream machine-readable indexes.
-# Buckets here override the computed bucket unless FC already has a formal_proof link.
+# Non-fidelity workflow judgments that cannot be inferred from upstream
+# machine-readable indexes: collision claims, won't-fix, deferrals, and problems
+# still awaiting a statement match-check. Buckets here override the computed
+# bucket unless FC already has a formal_proof link.
 #
-# An entry MAY also carry an optional `verdict:` key (faithful | variant | unfaithful)
-# when the judgment is specifically a statement-fidelity verdict. These are kept here
-# as human-readable mirrors; `compile_overrides_to_attestations.py` turns each into a
-# `vela attest faithfulness ...` command a human signs. The signed feed
-# (fidelity_cache.json / the hub snapshot) is the authority once present.
+# Statement-fidelity verdicts do NOT live here. Once a reviewer signs a
+# `vela attest faithfulness` verdict it lands in the erdos-formalization Vela
+# frontier and is read back via the hub snapshot (FIDELITY_URL), with
+# fidelity_cache.json as the offline fallback. A signed verdict supersedes any
+# bucket here, so problems with a signed verdict carry no row.
 
 45:
   bucket: blocked-claim
@@ -32,27 +34,9 @@
   reason: Previously dropped from a batch because no hosted proof cleanly matched the boxed statement.
   source: https://github.com/google-deepmind/formal-conjectures/issues/3998
 
-205:
-  bucket: hypothesis-conditional
-  verdict: variant
-  reason: Treat as conditional until the hosted theorem is confirmed to have no non-problem hypothesis.
-  source: https://github.com/google-deepmind/formal-conjectures/issues/3998
-
-214:
-  bucket: mismatch
-  verdict: unfaithful
-  reason: Hosted proof is complete, but proves an existential coloring result rather than the universal boxed problem.
-  source: https://github.com/google-deepmind/formal-conjectures/issues/3998
-
 330:
   bucket: needs-statement-update
   reason: FC already has an open answer-shaped statement; resolving this is not a trivial link-only update.
-  source: https://github.com/google-deepmind/formal-conjectures/issues/3998
-
-337:
-  bucket: mismatch
-  verdict: unfaithful
-  reason: Hosted proof is a counterexample/existence theorem and needs a fresh match-check before linking to the FC statement.
   source: https://github.com/google-deepmind/formal-conjectures/issues/3998
 
 459:
@@ -69,9 +53,3 @@
   bucket: wont-fix
   reason: Maintainer flagged the hosted proof as not actually complete.
   source: https://github.com/google-deepmind/formal-conjectures/issues/4051
-
-1148:
-  bucket: hypothesis-conditional
-  verdict: variant
-  reason: Hosted theorem takes Duke's theorem as a hypothesis; #print axioms alone would not catch this.
-  source: https://github.com/google-deepmind/formal-conjectures/issues/3998

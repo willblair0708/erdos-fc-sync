@@ -419,9 +419,6 @@ def load_overrides(path: str | Path = "overrides.yaml") -> dict[int, dict]:
         bucket = value.get("bucket")
         if bucket and bucket not in OVERRIDE_BUCKETS:
             raise ValueError(f"unknown override bucket for {problem}: {bucket}")
-        verdict = value.get("verdict")
-        if verdict and verdict not in FIDELITY_VERDICTS:
-            raise ValueError(f"unknown override verdict for {problem}: {verdict}")
         overrides[problem] = value
     return overrides
 

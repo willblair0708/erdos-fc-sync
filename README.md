@@ -72,10 +72,6 @@ machine-readable sources cannot know, such as:
 
 Do not hand-edit generated artifacts. Change `overrides.yaml` or the script, then regenerate.
 
-An override entry may also carry an optional `verdict:` key (`faithful` / `variant` /
-`unfaithful`) when the judgment is specifically a statement-fidelity verdict. These are kept as
-human-readable mirrors of the signed feed.
-
 ## Statement fidelity
 
 A signed statement-fidelity feed records, per problem, whether a formal theorem faithfully states
@@ -84,11 +80,10 @@ committed [`fidelity_cache.json`](fidelity_cache.json); if neither is present th
 empty and the run still succeeds. A signed verdict supersedes the computed bucket and any matching
 `overrides.yaml` row.
 
-Two standalone helpers support the loop:
+Verdicts are signed with `vela attest faithfulness` against the `erdos-formalization` Vela frontier
+(only a human reviewer can sign one); they are not stored in this repo. Review the match-check
+packet before signing:
 
-- [`compile_overrides_to_attestations.py`](compile_overrides_to_attestations.py) — reads
-  `overrides.yaml` and prints the signing command for each entry carrying a `verdict:`. It signs
-  nothing; it only emits commands a human reviews and runs.
 - [`match_packet.py`](match_packet.py) — writes a three-panel review packet (upstream statement,
   formal theorem, hosted theorem signature) to `packets/match-check/erdos_<n>.md` for a problem
   or for every row still needing a match-check.
