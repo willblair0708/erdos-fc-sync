@@ -918,7 +918,7 @@ def render_fidelity_section(payload: dict) -> list[str]:
 def render_status_md(payload: dict) -> str:
     out: list[str] = []
     out.append("# Erdős frontier — proof status\n")
-    out.append(f"*Regenerated {payload['generated_at']} by [`erdos_frontier.py`](erdos_frontier.py). Do not edit by hand.*\n")
+    out.append(f"*Regenerated {payload['generated_at']} by [`erdos_frontier.py`](../erdos_frontier.py). Do not edit by hand.*\n")
     out.append(
         "This is a **computed** view, not a hand-kept list. It joins erdosproblems.com, "
         "Formal Conjectures, hosted Lean proof indexes, live open PRs, and explicit human "
@@ -1080,6 +1080,7 @@ def render_verdicts_feed(payload: dict) -> dict:
 
 def write_outputs(payload: dict, root: str | Path = ".") -> None:
     root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
     (root / "STATUS.md").write_text(render_status_md(payload))
     (root / "NEXT_BATCH.md").write_text(render_next_batch_md(payload))
     (root / "status.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -1129,7 +1130,7 @@ def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
 
 def main() -> int:
     payload = load_live_status()
-    write_outputs(payload)
+    write_outputs(payload, "site")
     print(
         f"reconciled {payload['total_problems']} problems; "
         f"claims_available={payload['claims_available']}; "

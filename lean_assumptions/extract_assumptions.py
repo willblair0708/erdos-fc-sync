@@ -27,7 +27,7 @@ from collections import Counter
 
 HOME = pathlib.Path.home()
 SP = pathlib.Path(__file__).resolve().parent
-STATUS = SP.parent / "status.json"
+STATUS = SP.parent / "site" / "status.json"
 
 # Per-repo config. `root` is the lake project (where `lake env lean` runs and
 # `.lake/build` lives); override with the env var for CI checkouts. `glob` finds

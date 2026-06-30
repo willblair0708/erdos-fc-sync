@@ -27,7 +27,7 @@ discovers headline theorems per problem, generates a transient `extract_<tag>.le
 `lake env lean`, and writes:
 
 - `assumptions[_<tag>].jsonl` — one L1 record per theorem.
-- `audit_feed[_<tag>].json` — one row per problem (joined with `../status.json`).
+- `audit_feed[_<tag>].json` — one row per problem (joined with `../site/status.json`).
 
 `erdos_frontier` merges every `audit_feed*.json`, keeping the strongest verdict per
 problem with provenance. To rebuild every feed at once, use `scripts/reaudit.sh`.

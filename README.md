@@ -52,19 +52,22 @@ proof corpora and erdos/FC status fresh, folds in the machine fidelity verdicts
 artifacts. A GitHub Action regenerates them daily; the heavier Lean re-audit
 ([`scripts/reaudit.sh`](scripts/reaudit.sh)) runs on demand.
 
-Generated artifacts (do not edit by hand):
+It regenerates everything under [`site/`](site/) (the published surface, do not edit by hand):
 
-- **[verdicts.json](verdicts.json)** — the public audit feed, one row per problem, that the
-  [live page](index.html) renders.
-- **[STATUS.md](STATUS.md)** / **[status.json](status.json)** — the proof-status join and bucket counts.
-- **[NEXT_BATCH.md](NEXT_BATCH.md)** — ranked safe `statement` candidates to link into FC.
+- **[site/verdicts.json](site/verdicts.json)** — the public audit feed, one row per problem,
+  that the [live page](site/index.html) renders.
+- **[site/STATUS.md](site/STATUS.md)** / **[site/status.json](site/status.json)** — the
+  proof-status join and bucket counts.
+- **[site/NEXT_BATCH.md](site/NEXT_BATCH.md)** — ranked safe `statement` candidates to link into FC.
 
 ## Layout
 
 ```
 erdos_frontier.py     the audit: fetch, join, classify, render (importable + runnable)
 match_packet.py       human-review packets for the discrepancies (you sign, no AI signs)
-index.html            the live page (fetches verdicts.json)
+site/                 the published surface GitHub Pages serves
+  index.html          the live page (source; fetches verdicts.json)
+  verdicts.json …     generated feed + status.json + STATUS.md + NEXT_BATCH.md
 sources/              ingested claim sources, snapshotted + reproducible offline
   wiki/               the frozen teorth AI-contributions wiki + its parser
   gpt_erdos/          neelsomani/gpt-erdos classification + its parser
@@ -94,7 +97,7 @@ scripts/reaudit.sh    re-run the heavy Lean audit and regenerate the feeds
 | `done` | already linked in FC |
 | `no-proof` | no hosted Lean proof to link yet |
 
-See **[STATUS.md](STATUS.md)** for the live lists, each linked to erdosproblems.com.
+See **[site/STATUS.md](site/STATUS.md)** for the live lists, each linked to erdosproblems.com.
 
 ## Overrides
 
@@ -130,7 +133,7 @@ they are not stored in this repo. Review the packet before signing:
 uv sync --all-groups
 uv run pytest
 GH_TOKEN=$(gh auth token) uv run python erdos_frontier.py
-uv run python -m json.tool status.json >/dev/null
+uv run python -m json.tool site/status.json >/dev/null
 ```
 
 The token is only used to read open FC pull requests (the `in-pr` layer). Without it everything
@@ -148,7 +151,7 @@ Before pushing:
 uv sync --all-groups
 uv run pytest
 GH_TOKEN=$(gh auth token) uv run python erdos_frontier.py
-uv run python -m json.tool status.json >/dev/null
+uv run python -m json.tool site/status.json >/dev/null
 git diff --check
 ```
 
