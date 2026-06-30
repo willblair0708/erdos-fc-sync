@@ -5,60 +5,179 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Erdős formal-proof fidelity audit</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
-         max-width: 60rem; margin: 2.5rem auto; padding: 0 1.2rem; }
-  h1 { font-size: 1.4rem; margin-bottom: .2rem; }
-  .sub { opacity: .7; margin-top: 0; }
-  .lead { margin: 1.2rem 0; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-  th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid #8884; vertical-align: top; }
-  th { opacity: .65; font-weight: 600; }
-  code { background: #8881; padding: .05rem .3rem; border-radius: 3px; }
-  .hyp { color: #c0392b; }
-  a { color: inherit; }
-  .stat { display: inline-block; margin-right: 1.5rem; }
-  .stat b { font-size: 1.3rem; }
+  :root{
+    color-scheme: light dark;
+    --paper:#faf8f3; --ink:#1b1916; --faint:#6f675c; --hair:#dcd5c8;
+    --accent:#9a3b2e; --accent-bg:#9a3b2e12; --ok:#5b6e4f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --paper:#15120e; --ink:#e9e3d8; --faint:#9a9082; --hair:#332c23;
+           --accent:#d2735f; --accent-bg:#d2735f1a; --ok:#9fb18c; }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font:17px/1.6 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:62rem; margin:0 auto; padding:4.5rem 1.6rem 6rem; }
+  code,.mono{ font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:.86em; }
+  h1{ font-size:2.1rem; font-weight:600; letter-spacing:-.01em; margin:0 0 .4rem; }
+  .dek{ color:var(--faint); font-size:1.12rem; margin:0 0 2.4rem; max-width:42rem; }
+  .lede{ max-width:42rem; margin:0 0 3rem; }
+  .lede code{ background:var(--accent-bg); padding:.05rem .3rem; border-radius:2px; }
+  a{ color:inherit; text-decoration-color:var(--hair); text-underline-offset:2px; }
+  a:hover{ text-decoration-color:var(--accent); }
+
+  .funnel{ display:flex; flex-wrap:wrap; gap:1.5rem 2.2rem; align-items:baseline;
+    padding:1.6rem 0 1.8rem; border-top:1px solid var(--hair); border-bottom:1px solid var(--hair); margin-bottom:2.4rem; }
+  .step{ display:flex; flex-direction:column; gap:.15rem; }
+  .step .n{ font-family:ui-monospace,monospace; font-size:1.8rem; font-weight:500; letter-spacing:-.02em; }
+  .step .l{ color:var(--faint); font-size:.82rem; max-width:11rem; line-height:1.35; }
+  .step.flag .n{ color:var(--accent); }
+  .arrow{ color:var(--hair); }
+
+  .traps{ margin:0 0 3rem; padding:1.3rem 1.5rem; background:var(--accent-bg);
+    border-left:2px solid var(--accent); }
+  .traps h2{ font-size:1rem; margin:0 0 .5rem; font-weight:600; }
+  .traps ul{ margin:.3rem 0 0; padding:0; list-style:none; }
+  .traps li{ padding:.18rem 0; }
+  .traps .num{ color:var(--accent); font-family:ui-monospace,monospace; }
+
+  .controls{ display:flex; flex-wrap:wrap; gap:.6rem 1rem; align-items:center; margin-bottom:1rem; }
+  .controls input{ font:inherit; font-size:.95rem; padding:.35rem .6rem; width:11rem;
+    background:transparent; color:inherit; border:1px solid var(--hair); border-radius:3px; }
+  .chip{ font-family:ui-monospace,monospace; font-size:.8rem; padding:.25rem .55rem; cursor:pointer;
+    color:var(--faint); border:1px solid transparent; border-radius:3px; user-select:none; }
+  .chip:hover{ color:var(--ink); }
+  .chip.on{ color:var(--ink); border-color:var(--hair); background:#8881; }
+  .count{ color:var(--faint); font-size:.85rem; margin-left:auto; }
+
+  table{ border-collapse:collapse; width:100%; font-size:.92rem; }
+  thead th{ text-align:left; font-weight:600; color:var(--faint); font-size:.78rem;
+    text-transform:uppercase; letter-spacing:.04em; padding:.5rem .6rem; border-bottom:1px solid var(--hair); }
+  td{ padding:.5rem .6rem; border-bottom:1px solid var(--hair); vertical-align:top; }
+  tbody tr:hover{ background:#8881; }
+  td.p{ font-family:ui-monospace,monospace; }
+  .v{ font-family:ui-monospace,monospace; font-size:.82rem; }
+  .v.cond{ color:var(--accent); }
+  .v.uncond{ color:var(--ok); }
+  .on{ font-family:ui-monospace,monospace; font-size:.82rem; color:var(--faint); }
+  .on .named{ color:var(--accent); }
+  .sig{ font-size:.82rem; }
+  .foot{ margin-top:3rem; padding-top:1.4rem; border-top:1px solid var(--hair);
+    color:var(--faint); font-size:.85rem; }
 </style>
 </head>
 <body>
-<h1>Erdős formal-proof fidelity audit</h1>
-<p class="sub">Which "formally solved" Erdős claims rest on an <em>unconditional</em> proof — and which silently assume an unproven result.</p>
+<div class="wrap">
+  <h1>Erdős formal-proof fidelity audit</h1>
+  <p class="dek">Which “formally solved” Erdős problems rest on an <em>unconditional</em> Lean proof — and which silently assume an unproven result.</p>
 
-<p class="lead">A formal proof can be <code>sorry</code>-free and <code>#print axioms</code>-clean
-and still prove the problem only <strong>conditionally</strong> — by taking a deep theorem
-(<code>DukeTheoremStatement</code>, the Prime Number Theorem) as a hypothesis parameter, which the
-axiom check cannot see. This audit reads each hosted Lean proof mechanically and reports it.
-Machine-readable feed: <a href="verdicts.json">verdicts.json</a> · source:
-<a href="https://github.com/willblair0708/erdos-fc-sync">erdos-fc-sync</a>.</p>
+  <p class="lede">A formal proof can be <code>sorry</code>-free and <code>#print axioms</code>-clean and still
+  prove the problem only <em>conditionally</em> — by taking a deep theorem as a hypothesis parameter,
+  which the axiom check cannot see. This reads each hosted Lean proof mechanically and reports it.
+  No human or model judgment in the machine layer; signed verdicts carry a named reviewer.
+  Feed: <a href="verdicts.json">verdicts.json</a> · method: <a href="https://github.com/willblair0708/erdos-fc-sync/tree/main/lean_assumptions">lean_assumptions</a>.</p>
 
-<p id="summary"></p>
-<table id="rows"><thead><tr>
-  <th>problem</th><th>machine</th><th>conditional on</th><th>FC status</th><th>signed</th>
-</tr></thead><tbody></tbody></table>
+  <div class="funnel" id="funnel"></div>
+  <div class="traps" id="traps" hidden></div>
+
+  <div class="controls">
+    <input id="q" type="search" placeholder="problem #…" autocomplete="off">
+    <span class="chip on" data-f="audited">audited</span>
+    <span class="chip" data-f="conditional">conditional</span>
+    <span class="chip" data-f="axiomblind">axiom-invisible</span>
+    <span class="chip" data-f="unconditional">unconditional</span>
+    <span class="chip" data-f="signed">signed</span>
+    <span class="chip" data-f="all">all</span>
+    <span class="count" id="count"></span>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>machine verdict</th><th>conditional on</th><th>erdos status</th><th>signed</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <p class="foot" id="foot"></p>
+</div>
 
 <script>
-fetch('verdicts.json').then(r => r.json()).then(d => {
-  const s = d.summary;
-  document.getElementById('summary').innerHTML =
-    `<span class="stat"><b>${s.problems}</b> problems</span>` +
-    `<span class="stat"><b>${s.machine_conditional}</b> conditional</span>` +
-    `<span class="stat"><b>${s.axiom_clean_but_conditional.length}</b> kernel-clean&nbsp;but&nbsp;conditional ` +
-    `<small>(invisible to <code>#print axioms</code>)</small></span>`;
-  const tb = document.querySelector('#rows tbody');
-  d.rows.filter(r => r.machine_verdict === 'conditional')
-        .sort((a, b) => a.problem - b.problem)
-        .forEach(r => {
-    const on = (r.named_assumptions.length ? r.named_assumptions : r.non_kernel_axioms)
-                 .map(x => `<code class="${r.named_assumptions.length ? 'hyp' : ''}">${x}</code>`).join(' ');
-    const sig = r.signed_fidelity_verdict
-                 ? `${r.signed_fidelity_verdict}${r.signed_by ? ' · ' + r.signed_by : ''}` : '';
-    tb.insertAdjacentHTML('beforeend',
-      `<tr><td><a href="https://www.erdosproblems.com/${r.problem}">${r.problem}</a></td>` +
-      `<td>${r.machine_verdict}</td><td>${on}</td>` +
-      `<td>${r.erdos_state || ''}</td><td>${sig}</td></tr>`);
+let DATA = null, filter = "audited";
+
+function audited(r){ return r.machine_verdict != null; }
+function axiomblind(r){ return r.machine_verdict==="conditional" && !r.non_kernel_axioms.length && r.named_assumptions.length; }
+const FILTERS = {
+  all: () => true,
+  audited,
+  conditional: r => r.machine_verdict==="conditional",
+  unconditional: r => r.machine_verdict==="unconditional",
+  axiomblind,
+  signed: r => !!r.signed_fidelity_verdict,
+};
+
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function condOn(r){
+  if(r.named_assumptions.length)
+    return r.named_assumptions.map(a => `<span class="named">${esc(a.split(" : ").pop())}</span>`).join(", ");
+  if(r.non_kernel_axioms.length) return r.non_kernel_axioms.map(esc).join(", ");
+  return "";
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim();
+  let rows = DATA.rows.filter(FILTERS[filter]);
+  if(q) rows = rows.filter(r => String(r.problem).includes(q));
+  rows.sort((a,b) => {
+    const rank = v => v==="conditional"?0 : v==="unconditional"?1 : 2;
+    return rank(a.machine_verdict)-rank(b.machine_verdict) || a.problem-b.problem;
   });
-}).catch(e => { document.getElementById('summary').textContent = 'feed unavailable: ' + e; });
+  document.getElementById("count").textContent = `${rows.length} shown`;
+  document.getElementById("rows").innerHTML = rows.map(r => {
+    const vcl = r.machine_verdict==="conditional" ? "cond" : r.machine_verdict==="unconditional" ? "uncond" : "";
+    const sig = r.signed_fidelity_verdict
+      ? `${esc(r.signed_fidelity_verdict)}${r.signed_by ? " · "+esc(r.signed_by) : ""}` : "";
+    return `<tr><td class="p"><a href="https://www.erdosproblems.com/${r.problem}">${r.problem}</a></td>`
+      + `<td><span class="v ${vcl}">${r.machine_verdict ?? "—"}</span></td>`
+      + `<td class="on">${condOn(r)}</td>`
+      + `<td>${esc(r.erdos_state||"")}</td><td class="sig">${sig}</td></tr>`;
+  }).join("");
+}
+
+fetch("verdicts.json").then(r=>r.json()).then(d=>{
+  DATA = d;
+  const rows = d.rows;
+  const n = f => rows.filter(f).length;
+  const proof = rows.filter(r => r.bucket!=="no-proof").length;
+  const funnel = [
+    [rows.length, "Erdős problems"],
+    [proof, "have a hosted Lean proof"],
+    [n(audited), "machine-audited"],
+    [n(FILTERS.conditional), "conditional", true],
+    [n(axiomblind), "kernel-clean yet conditional — invisible to #print axioms", true],
+    [n(FILTERS.signed), "human-signed verdicts"],
+  ];
+  document.getElementById("funnel").innerHTML = funnel.map(([num,lab,flag],i) =>
+    `<div class="step${flag?" flag":""}"><span class="n">${num}</span><span class="l">${esc(lab)}</span></div>`
+    + (i<funnel.length-1 ? `<span class="arrow">→</span>` : "")).join("");
+
+  const traps = rows.filter(axiomblind).filter(r =>
+    /Statement|Hypothesis|Theorem|Conjecture|PNT|Duke|Density|Goldston|EremenkoLempert/i
+      .test((r.named_assumptions[0]||"")));
+  if(traps.length){
+    const el = document.getElementById("traps"); el.hidden = false;
+    el.innerHTML = `<h2>Proofs that pass every automatic check, yet assume a named theorem</h2>`
+      + `<ul>${traps.sort((a,b)=>a.problem-b.problem).map(r =>
+        `<li><span class="num">${r.problem}</span> — assumes <code>${esc(r.named_assumptions[0].split(" : ").pop())}</code></li>`).join("")}</ul>`;
+  }
+  document.getElementById("foot").innerHTML =
+    `Generated ${esc(d.generated_at)} · sources: erdosproblems.com, formal-conjectures, plby / Jayyhk / willblair0708 Lean proofs · `
+    + `<a href="https://github.com/willblair0708/erdos-fc-sync">source</a>`;
+  render();
+});
+
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+  document.querySelectorAll(".chip").forEach(x => x.classList.remove("on"));
+  c.classList.add("on"); filter = c.dataset.f; render();
+}));
+document.getElementById("q").addEventListener("input", render);
 </script>
 </body>
 </html>
