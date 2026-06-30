@@ -12,6 +12,12 @@ on:
 permissions:
   contents: write
 
+# Serialize with audit-proofs.yml: both commit to main, so never run them
+# concurrently (a queued run waits rather than racing the push).
+concurrency:
+  group: commit-to-main
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -37,5 +43,6 @@ jobs:
             echo "Generated artifacts unchanged."
           else
             git commit -m "chore: refresh audit ($(date -u +%Y-%m-%d))"
+            git pull --rebase origin main || true
             git push
           fi

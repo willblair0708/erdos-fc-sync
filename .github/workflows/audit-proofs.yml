@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+# Share the daily job's group so the two never push to main concurrently.
+concurrency:
+  group: commit-to-main
+  cancel-in-progress: false
+
 jobs:
   reaudit:
     runs-on: ubuntu-latest
@@ -28,14 +33,16 @@ jobs:
             | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Cache Lean build artifacts
+      # Cache only the elan toolchains (modest, conflict-free). Mathlib oleans come
+      # from `lake exe cache get`; the proof files themselves compile each run.
+      # NOT caching proof-repos/.lake — it would be restored before the clone and
+      # make `git clone` fail on a non-empty dir.
+      - name: Cache the Lean toolchains
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.elan
-            proof-repos/**/.lake
-          key: lean-audit-${{ hashFiles('proof-repos/**/lean-toolchain') }}-v1
-          restore-keys: lean-audit-
+          path: ~/.elan
+          key: elan-${{ runner.os }}-v1
+          restore-keys: elan-${{ runner.os }}-
 
       - name: Clone proof repos
         run: |
@@ -43,17 +50,21 @@ jobs:
           git clone --depth 1 https://github.com/williamjblair/lean-proofs-fork.git proof-repos/plby
           git clone --depth 1 https://github.com/google-deepmind/alphaproof-nexus-results.git proof-repos/alphaproof
 
-      - name: Build plby fork (Lean 4.29.1)
+      # Build ONLY the ErdosProblems library (the aggregate ErdosProblems.All), not
+      # the fork's default "All" target — that also pulls HundredTheorems / MathOverflow
+      # / PrimeNumberTheoremAnd, which the extractor never reads and which only add
+      # build time and failure surface.
+      - name: Build plby fork ErdosProblems (Lean 4.29.1)
         working-directory: proof-repos/plby/src/v4.29.1
         run: |
           lake exe cache get || true
-          lake build
+          lake build ErdosProblems.All
 
       - name: Build alphaproof-nexus (Lean 4.27.0)
         working-directory: proof-repos/alphaproof
         run: |
           lake exe cache get || true
-          lake build
+          lake build APNOutputs
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -82,5 +93,6 @@ jobs:
             echo "Audit feeds unchanged."
           else
             git commit -m "chore: re-audit proofs ($(date -u +%Y-%m-%d))"
+            git pull --rebase origin main || true
             git push
           fi
