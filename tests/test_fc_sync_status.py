@@ -2,14 +2,17 @@ import json
 
 from fc_sync_status import (
     Claim,
+    _wiki_summary,
     apply_machine_audit,
     build_proofs,
     build_status,
     classify,
     load_fidelity,
+    load_wiki_registry,
     parse_fidelity,
     render_next_batch_md,
     render_status_md,
+    render_verdicts_feed,
 )
 
 
@@ -53,7 +56,8 @@ def complete_plby_proofs(*problems):
     return build_proofs([{"key": f"Erdos{problem}"} for problem in problems], [], {})
 
 
-def status_for(problem, *, proof=None, fc=None, claims=None, override=None, fidelity=None):
+def status_for(problem, *, proof=None, fc=None, claims=None, override=None,
+               fidelity=None, wiki=None):
     payload = build_status(
         erdos=erdos_records(problem),
         fc={problem: fc} if fc else {},
@@ -62,6 +66,7 @@ def status_for(problem, *, proof=None, fc=None, claims=None, override=None, fide
         claims_available=True,
         overrides={problem: override} if override else {},
         fidelity={problem: fidelity} if fidelity else {},
+        wiki={problem: wiki} if wiki else {},
         generated_at="2026-06-29",
     )
     return payload, payload["rows"][0]
@@ -296,3 +301,80 @@ def test_load_fidelity_reads_committed_cache_file():
     assert 214 in cached
     assert cached[214]["source"] == "cache"
     assert cached[214]["signed"] is True
+
+
+# --- frozen AI-contributions wiki: registry + the discrepancy view ----------
+
+WIKI_FULL_LEAN = [
+    {"section": "1(a)", "section_name": "AI standalone",
+     "ai_systems": ["DeepMind prover agent"], "date": "21 Feb, 2026",
+     "outcome": {"color": "yellow", "label": "Solution to variant problem (Lean)", "lean": True}},
+    {"section": "1(a)", "section_name": "AI standalone",
+     "ai_systems": ["DeepMind prover agent"], "date": "30 Mar, 2026",
+     "outcome": {"color": "green", "label": "Full solution (Lean)", "lean": True}},
+]
+
+
+def machine_conditional_proof(problem, *, named=(), axioms=()):
+    proofs = complete_plby_proofs(problem)
+    apply_machine_audit(proofs, {problem: {
+        "problem": problem, "machine_verdict": "conditional",
+        "named_assumptions": list(named), "non_kernel_axioms": list(axioms)}})
+    return proofs[problem]
+
+
+def machine_unconditional_proof(problem):
+    proofs = complete_plby_proofs(problem)
+    apply_machine_audit(proofs, {problem: {
+        "problem": problem, "machine_verdict": "unconditional",
+        "named_assumptions": [], "non_kernel_axioms": []}})
+    return proofs[problem]
+
+
+def test_wiki_summary_collapses_entries_to_strongest_claim():
+    s = _wiki_summary(WIKI_FULL_LEAN)
+    assert s["claims_full_solution"] is True   # a green "Full solution" entry exists
+    assert s["claims_lean"] is True            # at least one (Lean) entry
+    assert s["claimed_color"] == "green"       # strongest non-red colour
+    assert s["ai_systems"] == ["DeepMind prover agent"]
+    assert s["has_incorrect"] is False
+
+
+def test_wiki_claim_plus_conditional_proof_flags_discrepancy():
+    # The frozen wiki records 1148 as a full solution; the hosted Lean proof we
+    # load assumes DukeTheoremStatement as a parameter -> the wedge made visible.
+    proof = machine_conditional_proof(1148, named=["h : Erdos1148.DukeTheoremStatement"])
+    payload, row = status_for(1148, proof=proof, wiki=_wiki_summary(WIKI_FULL_LEAN))
+
+    assert row["wiki"]["claims_full_solution"] is True
+    assert row["discrepancy"] is True
+
+    feed_row = render_verdicts_feed(payload)["rows"][0]
+    assert feed_row["wiki_claims_solved"] is True
+    assert feed_row["discrepancy"] is True
+    assert 1148 in render_verdicts_feed(payload)["summary"]["discrepancies"]
+
+
+def test_no_discrepancy_when_audited_proof_is_unconditional():
+    # The celebrated proofs (#728 etc.) come out unconditional: no false flag.
+    proof = machine_unconditional_proof(728)
+    _, row = status_for(728, proof=proof, wiki=_wiki_summary(WIKI_FULL_LEAN))
+
+    assert row["wiki"]["claims_full_solution"] is True
+    assert row["discrepancy"] is False
+
+
+def test_row_without_wiki_entry_has_no_claim_or_discrepancy():
+    proof = machine_conditional_proof(999, named=["h : Erdos999.Hyp"])
+    _, row = status_for(999, proof=proof)
+
+    assert row["wiki"] is None
+    assert row["discrepancy"] is False
+
+
+def test_load_wiki_registry_reads_committed_snapshot():
+    # The committed wiki_registry.json is the frozen-wiki seed.
+    reg = load_wiki_registry()
+    assert 728 in reg
+    assert reg[728]["claims_full_solution"] is True
+    assert reg[728]["claims_lean"] is True

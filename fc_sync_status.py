@@ -282,6 +282,68 @@ def apply_machine_audit(proofs: dict[int, dict], audit: dict[int, dict]) -> None
             rec["complete"] = not rec.get("partial")
 
 
+WIKI_REGISTRY_PATH = Path(__file__).resolve().parent / "wiki_registry.json"
+WIKI_SOURCE = ("https://github.com/teorth/erdosproblems/wiki/"
+               "AI-contributions-to-Erd%C5%91s-problems")
+
+_COLOR_RANK = {"green": 3, "yellow": 2, "white": 1, "red": 0}
+
+
+def _wiki_is_full(entry: dict) -> bool:
+    """A green entry asserting the boxed problem itself is resolved (or beaten)."""
+    outcome = entry.get("outcome") or {}
+    label = (outcome.get("label") or "").lower()
+    return outcome.get("color") == "green" and (
+        "full solution" in label or "stronger" in label or "solved" in label
+    )
+
+
+def _wiki_summary(entries: list[dict]) -> dict:
+    """Collapse a problem's wiki entries into one per-problem claim view."""
+    ai = sorted({s for e in entries for s in e.get("ai_systems", [])})
+    humans = sorted({h for e in entries for h in e.get("humans", [])})
+    best = max(
+        (e for e in entries if (e.get("outcome") or {}).get("color") != "red"),
+        key=lambda e: _COLOR_RANK.get((e.get("outcome") or {}).get("color"), 0),
+        default=None,
+    )
+    best_outcome = (best or {}).get("outcome") or {}
+    return {
+        "ai_systems": ai,
+        "humans": humans,
+        "claimed_color": best_outcome.get("color"),
+        "outcome_label": best_outcome.get("label"),
+        "claims_full_solution": any(_wiki_is_full(e) for e in entries),
+        "claims_lean": any((e.get("outcome") or {}).get("lean") for e in entries),
+        "has_incorrect": any(
+            (e.get("outcome") or {}).get("color") == "red" for e in entries),
+        "entries": entries,
+    }
+
+
+def load_wiki_registry(path: Path = WIKI_REGISTRY_PATH) -> dict[int, dict]:
+    """Per-problem view of the frozen teorth AI-contributions wiki (2026-06-30).
+
+    The wiki is the registry this audit is a superset of: it carries the claim
+    (which AI, which humans, what outcome colour) but never the conditionality of
+    the underlying proof — the column this audit adds. Re-derived offline from the
+    committed ``wiki_snapshot/`` markdown by ``wiki_snapshot.py``; this reads only
+    the resulting ``wiki_registry.json``. Empty if the snapshot is absent.
+    """
+    try:
+        doc = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out: dict[int, dict] = {}
+    for key, entries in (doc.get("problems") or {}).items():
+        try:
+            problem = int(key)
+        except (TypeError, ValueError):
+            continue
+        out[problem] = _wiki_summary(entries)
+    return out
+
+
 def build_fc(conjectures: dict) -> dict[int, dict]:
     entries = []
     for value in conjectures.values():
@@ -550,6 +612,15 @@ def fidelity_field(fidelity: dict | None, fc_data: dict) -> dict | None:
     }
 
 
+def wiki_field(wiki: dict | None) -> dict | None:
+    """Project the per-row wiki claim view (everything but the raw entry list)."""
+    if not wiki:
+        return None
+    return {key: wiki[key] for key in (
+        "ai_systems", "humans", "claimed_color", "outcome_label",
+        "claims_full_solution", "claims_lean", "has_incorrect")}
+
+
 def row_for_problem(
     problem: int,
     erdos_record: dict,
@@ -558,9 +629,17 @@ def row_for_problem(
     claims: list[Claim],
     override: dict | None,
     fidelity: dict | None = None,
+    wiki: dict | None = None,
 ) -> dict:
     fc_data = fc_record or {"has_file": False, "linked": False, "path": None, "formal_proof_link": None}
     bucket = classify(problem, fc_data, proof, claims, override, fidelity)
+    machine_verdict = proof.get("machine_verdict") if proof else None
+    # The wedge made visible: the wiki records the boxed problem as fully solved,
+    # yet the formal proof we can actually load is conditional or incomplete. A
+    # machine fact about the available proof, not a verdict on the wiki's claim.
+    discrepancy = bool(
+        wiki and wiki.get("claims_full_solution")
+        and machine_verdict in ("conditional", "incomplete"))
     sources = source_names(proof)
     proof_links = []
     if proof:
@@ -594,6 +673,8 @@ def row_for_problem(
         },
         "claims": [asdict(claim) for claim in claims],
         "override": override or None,
+        "wiki": wiki_field(wiki),
+        "discrepancy": discrepancy,
         "fidelity": fidelity_field(fidelity, fc_data),
         "machine": (
             {
@@ -617,10 +698,12 @@ def build_status(
     claims_available: bool,
     overrides: dict[int, dict],
     fidelity: dict[int, dict] | None = None,
+    wiki: dict[int, dict] | None = None,
     generated_at: str | None = None,
 ) -> dict:
     generated_at = generated_at or _datetime.date.today().isoformat()
     fidelity = fidelity or {}
+    wiki = wiki or {}
     rows = [
         row_for_problem(
             problem,
@@ -630,6 +713,7 @@ def build_status(
             claims_by_problem.get(problem, []),
             overrides.get(problem),
             fidelity.get(problem),
+            wiki.get(problem),
         )
         for problem in sorted(erdos)
     ]
@@ -650,11 +734,14 @@ def build_status(
             "jayyhk": JAYY_URL,
             "vlp": VLP_URL,
             "fidelity": FIDELITY_URL,
+            "wiki": WIKI_SOURCE,
             "fc_repo": FC_REPO,
         },
         "counts": {bucket: counts.get(bucket, 0) for bucket in BUCKET_ORDER},
         "total_problems": len(rows),
         "hosted_proofs_tracked": len(proofs),
+        "wiki_problems_tracked": len(wiki),
+        "discrepancies": sorted(r["problem"] for r in rows if r.get("discrepancy")),
         "bloom_formalized_count": len(bloom_formalized),
         "coverage_gap": coverage_gap,
         "rows": rows,
@@ -831,6 +918,7 @@ def render_verdicts_feed(payload: dict) -> dict:
     for r in payload["rows"]:
         machine = r.get("machine") or {}
         fidelity = r.get("fidelity") or {}
+        wiki = r.get("wiki") or {}
         rows.append({
             "problem": r["problem"],
             "erdos_url": r["erdos_url"],
@@ -840,6 +928,15 @@ def render_verdicts_feed(payload: dict) -> dict:
             "machine_verdict": machine.get("verdict"),
             "named_assumptions": machine.get("named_assumptions") or [],
             "non_kernel_axioms": machine.get("non_kernel_axioms") or [],
+            # the frozen-wiki claim this row is a superset of (None if absent).
+            "wiki_ai_systems": wiki.get("ai_systems") or [],
+            "wiki_humans": wiki.get("humans") or [],
+            "wiki_outcome": wiki.get("outcome_label"),
+            "wiki_color": wiki.get("claimed_color"),
+            "wiki_claims_solved": bool(wiki.get("claims_full_solution")),
+            "wiki_claims_lean": bool(wiki.get("claims_lean")),
+            # wiki says solved; the available formal proof is conditional/incomplete.
+            "discrepancy": bool(r.get("discrepancy")),
             "signed_fidelity_verdict": fidelity.get("verdict"),
             "signed_by": fidelity.get("reviewer") if fidelity.get("signed") else None,
             "recommended_action": r.get("recommended_action"),
@@ -851,11 +948,13 @@ def render_verdicts_feed(payload: dict) -> dict:
         "sources": payload.get("sources"),
         "summary": {
             "problems": len(rows),
+            "wiki_problems": sum(1 for r in rows if r["wiki_outcome"] is not None),
             "machine_conditional": len(flagged),
             "axiom_clean_but_conditional": [
                 r["problem"] for r in flagged
                 if r["named_assumptions"] and not r["non_kernel_axioms"]
             ],
+            "discrepancies": [r["problem"] for r in rows if r["discrepancy"]],
         },
         "rows": rows,
     }
@@ -884,6 +983,7 @@ def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
     claims_by_problem, claims_available = fetch_claims()
     overrides = load_overrides(overrides_path)
     fidelity = load_fidelity(FIDELITY_URL)
+    wiki = load_wiki_registry()
     for problem in fetch_wontfix():
         overrides.setdefault(
             problem,
@@ -901,6 +1001,7 @@ def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
         claims_available=claims_available,
         overrides=overrides,
         fidelity=fidelity,
+        wiki=wiki,
     )
 
 

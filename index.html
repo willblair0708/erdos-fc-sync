@@ -18,29 +18,35 @@
   body{ margin:0; background:var(--paper); color:var(--ink);
     font:17px/1.6 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
     -webkit-font-smoothing:antialiased; }
-  .wrap{ max-width:62rem; margin:0 auto; padding:4.5rem 1.6rem 6rem; }
+  .wrap{ max-width:64rem; margin:0 auto; padding:4.5rem 1.6rem 6rem; }
   code,.mono{ font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:.86em; }
   h1{ font-size:2.1rem; font-weight:600; letter-spacing:-.01em; margin:0 0 .4rem; }
-  .dek{ color:var(--faint); font-size:1.12rem; margin:0 0 2.4rem; max-width:42rem; }
-  .lede{ max-width:42rem; margin:0 0 3rem; }
+  .dek{ color:var(--faint); font-size:1.12rem; margin:0 0 2.4rem; max-width:44rem; }
+  .lede{ max-width:44rem; margin:0 0 2.6rem; }
   .lede code{ background:var(--accent-bg); padding:.05rem .3rem; border-radius:2px; }
   a{ color:inherit; text-decoration-color:var(--hair); text-underline-offset:2px; }
   a:hover{ text-decoration-color:var(--accent); }
 
-  .funnel{ display:flex; flex-wrap:wrap; gap:1.5rem 2.2rem; align-items:baseline;
+  .funnel{ display:flex; flex-wrap:wrap; gap:1.4rem 2rem; align-items:baseline;
     padding:1.6rem 0 1.8rem; border-top:1px solid var(--hair); border-bottom:1px solid var(--hair); margin-bottom:2.4rem; }
   .step{ display:flex; flex-direction:column; gap:.15rem; }
-  .step .n{ font-family:ui-monospace,monospace; font-size:1.8rem; font-weight:500; letter-spacing:-.02em; }
-  .step .l{ color:var(--faint); font-size:.82rem; max-width:11rem; line-height:1.35; }
+  .step .n{ font-family:ui-monospace,monospace; font-size:1.7rem; font-weight:500; letter-spacing:-.02em; }
+  .step .l{ color:var(--faint); font-size:.8rem; max-width:11rem; line-height:1.35; }
   .step.flag .n{ color:var(--accent); }
   .arrow{ color:var(--hair); }
 
-  .traps{ margin:0 0 3rem; padding:1.3rem 1.5rem; background:var(--accent-bg);
+  .lead{ margin:0 0 2.8rem; padding:1.4rem 1.6rem; background:var(--accent-bg);
     border-left:2px solid var(--accent); }
-  .traps h2{ font-size:1rem; margin:0 0 .5rem; font-weight:600; }
-  .traps ul{ margin:.3rem 0 0; padding:0; list-style:none; }
-  .traps li{ padding:.18rem 0; }
-  .traps .num{ color:var(--accent); font-family:ui-monospace,monospace; }
+  .lead h2{ font-size:1.05rem; margin:0 0 .2rem; font-weight:600; }
+  .lead p.sub{ color:var(--faint); font-size:.9rem; margin:0 0 1rem; max-width:42rem; }
+  .lead table{ width:100%; border-collapse:collapse; font-size:.9rem; }
+  .lead td{ padding:.32rem .5rem .32rem 0; border-bottom:1px solid var(--hair); vertical-align:top; }
+  .lead td.p{ font-family:ui-monospace,monospace; white-space:nowrap; }
+  .lead td.on{ font-family:ui-monospace,monospace; font-size:.84rem; color:var(--accent); }
+  .lead .inv{ font-size:.72rem; color:var(--faint); border:1px solid var(--hair);
+    border-radius:3px; padding:.02rem .3rem; margin-left:.4rem; white-space:nowrap; }
+  .lead .claim{ color:var(--faint); }
+  .note{ color:var(--faint); font-size:.8rem; margin:.9rem 0 0; max-width:42rem; }
 
   .controls{ display:flex; flex-wrap:wrap; gap:.6rem 1rem; align-items:center; margin-bottom:1rem; }
   .controls input{ font:inherit; font-size:.95rem; padding:.35rem .6rem; width:11rem;
@@ -49,19 +55,24 @@
     color:var(--faint); border:1px solid transparent; border-radius:3px; user-select:none; }
   .chip:hover{ color:var(--ink); }
   .chip.on{ color:var(--ink); border-color:var(--hair); background:#8881; }
+  .chip.disc.on{ color:var(--accent); border-color:var(--accent); }
   .count{ color:var(--faint); font-size:.85rem; margin-left:auto; }
 
-  table{ border-collapse:collapse; width:100%; font-size:.92rem; }
-  thead th{ text-align:left; font-weight:600; color:var(--faint); font-size:.78rem;
+  table.grid{ border-collapse:collapse; width:100%; font-size:.92rem; }
+  thead th{ text-align:left; font-weight:600; color:var(--faint); font-size:.74rem;
     text-transform:uppercase; letter-spacing:.04em; padding:.5rem .6rem; border-bottom:1px solid var(--hair); }
-  td{ padding:.5rem .6rem; border-bottom:1px solid var(--hair); vertical-align:top; }
+  .grid td{ padding:.5rem .6rem; border-bottom:1px solid var(--hair); vertical-align:top; }
   tbody tr:hover{ background:#8881; }
+  tr.disc td{ background:var(--accent-bg); }
   td.p{ font-family:ui-monospace,monospace; }
   .v{ font-family:ui-monospace,monospace; font-size:.82rem; }
   .v.cond{ color:var(--accent); }
   .v.uncond{ color:var(--ok); }
   .on{ font-family:ui-monospace,monospace; font-size:.82rem; color:var(--faint); }
   .on .named{ color:var(--accent); }
+  .wiki .o{ font-size:.86rem; }
+  .wiki .ai{ display:block; font-size:.74rem; color:var(--faint); margin-top:.1rem; }
+  .dot{ display:inline-block; width:.55rem; }
   .sig{ font-size:.82rem; }
   .foot{ margin-top:3rem; padding-top:1.4rem; border-top:1px solid var(--hair);
     color:var(--faint); font-size:.85rem; }
@@ -74,25 +85,38 @@
 
   <p class="lede">A formal proof can be <code>sorry</code>-free and <code>#print axioms</code>-clean and still
   prove the problem only <em>conditionally</em> — by taking a deep theorem as a hypothesis parameter,
-  which the axiom check cannot see. This reads each hosted Lean proof mechanically and reports it.
-  No human or model judgment in the machine layer; signed verdicts carry a named reviewer.
-  Feed: <a href="verdicts.json">verdicts.json</a> · method: <a href="https://github.com/williamjblair/erdos-fc-sync/tree/main/lean_assumptions">lean_assumptions</a>.</p>
+  which the axiom check cannot see. This reads each hosted Lean proof mechanically and reports it, then
+  cross-references the (now frozen) <a href="https://github.com/teorth/erdosproblems/wiki/AI-contributions-to-Erd%C5%91s-problems">AI-contributions wiki</a>
+  to surface where a problem recorded as solved rests on a proof that is not.
+  No human or model judgment in the machine layer; signed verdicts carry a named reviewer.</p>
 
   <div class="funnel" id="funnel"></div>
-  <div class="traps" id="traps" hidden></div>
+
+  <div class="lead" id="lead" hidden>
+    <h2>Recorded as solved, proof is conditional</h2>
+    <p class="sub">Problems the frozen AI-contributions wiki lists as a full solution, where the hosted
+      Lean proof loaded here proves the goal only under an undischarged assumption.</p>
+    <table id="lead-rows"></table>
+    <p class="note">This reports the conditionality of the formal proof available to the audit. The wiki’s
+      claim may rest on a different or informal argument; the point is that the machine-checkable proof,
+      as written, is not unconditional. A <span class="inv">#print&nbsp;axioms&nbsp;invisible</span> tag marks the
+      cases an axiom check alone would pass.</p>
+  </div>
 
   <div class="controls">
     <input id="q" type="search" placeholder="problem #…" autocomplete="off">
+    <span class="chip disc" data-f="discrepancy">discrepancy</span>
     <span class="chip on" data-f="audited">audited</span>
     <span class="chip" data-f="conditional">conditional</span>
     <span class="chip" data-f="axiomblind">axiom-invisible</span>
     <span class="chip" data-f="unconditional">unconditional</span>
+    <span class="chip" data-f="wiki">in wiki</span>
     <span class="chip" data-f="signed">signed</span>
     <span class="chip" data-f="all">all</span>
     <span class="count" id="count"></span>
   </div>
-  <table>
-    <thead><tr><th>#</th><th>machine verdict</th><th>conditional on</th><th>erdos status</th><th>signed</th></tr></thead>
+  <table class="grid">
+    <thead><tr><th>#</th><th>machine verdict</th><th>conditional on</th><th>wiki claim</th><th>signed</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 
@@ -101,6 +125,7 @@
 
 <script>
 let DATA = null, filter = "audited";
+const COLOR = {green:"🟢", yellow:"🟡", red:"🔴", white:"⚪"};
 
 function audited(r){ return r.machine_verdict != null; }
 function axiomblind(r){ return r.machine_verdict==="conditional" && !r.non_kernel_axioms.length && r.named_assumptions.length; }
@@ -110,6 +135,8 @@ const FILTERS = {
   conditional: r => r.machine_verdict==="conditional",
   unconditional: r => r.machine_verdict==="unconditional",
   axiomblind,
+  discrepancy: r => r.discrepancy,
+  wiki: r => r.wiki_outcome != null,
   signed: r => !!r.signed_fidelity_verdict,
 };
 
@@ -118,7 +145,14 @@ function condOn(r){
   if(r.named_assumptions.length)
     return r.named_assumptions.map(a => `<span class="named">${esc(a.split(" : ").pop())}</span>`).join(", ");
   if(r.non_kernel_axioms.length) return r.non_kernel_axioms.map(esc).join(", ");
-  return "";
+  return r.machine_verdict==="incomplete" ? "<span class='named'>incomplete (sorry)</span>" : "";
+}
+function wikiCell(r){
+  if(r.wiki_outcome == null) return "";
+  const dot = COLOR[r.wiki_color] || "";
+  const ai = (r.wiki_ai_systems||[]).join(", ");
+  return `<span class="o">${dot} ${esc(r.wiki_outcome)}</span>`
+    + (ai ? `<span class="ai">${esc(ai)}</span>` : "");
 }
 
 function render(){
@@ -126,7 +160,8 @@ function render(){
   let rows = DATA.rows.filter(FILTERS[filter]);
   if(q) rows = rows.filter(r => String(r.problem).includes(q));
   rows.sort((a,b) => {
-    const rank = v => v==="conditional"?0 : v==="unconditional"?1 : 2;
+    if(a.discrepancy !== b.discrepancy) return a.discrepancy ? -1 : 1;
+    const rank = v => v==="conditional"?0 : v==="incomplete"?1 : v==="unconditional"?2 : 3;
     return rank(a.machine_verdict)-rank(b.machine_verdict) || a.problem-b.problem;
   });
   document.getElementById("count").textContent = `${rows.length} shown`;
@@ -134,10 +169,11 @@ function render(){
     const vcl = r.machine_verdict==="conditional" ? "cond" : r.machine_verdict==="unconditional" ? "uncond" : "";
     const sig = r.signed_fidelity_verdict
       ? `${esc(r.signed_fidelity_verdict)}${r.signed_by ? " · "+esc(r.signed_by) : ""}` : "";
-    return `<tr><td class="p"><a href="https://www.erdosproblems.com/${r.problem}">${r.problem}</a></td>`
+    return `<tr class="${r.discrepancy?"disc":""}"><td class="p"><a href="https://www.erdosproblems.com/${r.problem}">${r.problem}</a></td>`
       + `<td><span class="v ${vcl}">${r.machine_verdict ?? "—"}</span></td>`
       + `<td class="on">${condOn(r)}</td>`
-      + `<td>${esc(r.erdos_state||"")}</td><td class="sig">${sig}</td></tr>`;
+      + `<td class="wiki">${wikiCell(r)}</td>`
+      + `<td class="sig">${sig}</td></tr>`;
   }).join("");
 }
 
@@ -151,25 +187,31 @@ fetch("verdicts.json").then(r=>r.json()).then(d=>{
     [proof, "have a hosted Lean proof"],
     [n(audited), "machine-audited"],
     [n(FILTERS.conditional), "conditional", true],
-    [n(axiomblind), "kernel-clean yet conditional — invisible to #print axioms", true],
-    [n(FILTERS.signed), "human-signed verdicts"],
+    [n(axiomblind), "kernel-clean yet conditional", true],
+    [n(FILTERS.wiki), "in the frozen wiki"],
+    [n(FILTERS.discrepancy), "recorded solved, proof conditional", true],
   ];
   document.getElementById("funnel").innerHTML = funnel.map(([num,lab,flag],i) =>
     `<div class="step${flag?" flag":""}"><span class="n">${num}</span><span class="l">${esc(lab)}</span></div>`
     + (i<funnel.length-1 ? `<span class="arrow">→</span>` : "")).join("");
 
-  const traps = rows.filter(axiomblind).filter(r =>
-    /Statement|Hypothesis|Theorem|Conjecture|PNT|Duke|Density|Goldston|EremenkoLempert/i
-      .test((r.named_assumptions[0]||"")));
-  if(traps.length){
-    const el = document.getElementById("traps"); el.hidden = false;
-    el.innerHTML = `<h2>Proofs that pass every automatic check, yet assume a named theorem</h2>`
-      + `<ul>${traps.sort((a,b)=>a.problem-b.problem).map(r =>
-        `<li><span class="num">${r.problem}</span> — assumes <code>${esc(r.named_assumptions[0].split(" : ").pop())}</code></li>`).join("")}</ul>`;
+  const disc = rows.filter(FILTERS.discrepancy).sort((a,b)=>a.problem-b.problem);
+  if(disc.length){
+    const el = document.getElementById("lead"); el.hidden = false;
+    document.getElementById("lead-rows").innerHTML = disc.map(r => {
+      const inv = (r.named_assumptions.length && !r.non_kernel_axioms.length)
+        ? `<span class="inv">#print axioms invisible</span>` : "";
+      return `<tr><td class="p"><a href="https://www.erdosproblems.com/${r.problem}">${r.problem}</a></td>`
+        + `<td class="claim">${COLOR[r.wiki_color]||""} ${esc(r.wiki_outcome||"")}</td>`
+        + `<td class="on">conditional on ${condOn(r)}${inv}</td></tr>`;
+    }).join("");
   }
   document.getElementById("foot").innerHTML =
-    `Generated ${esc(d.generated_at)} · sources: erdosproblems.com, formal-conjectures, plby / Jayyhk / williamjblair Lean proofs · `
-    + `<a href="https://github.com/williamjblair/erdos-fc-sync">source</a>`;
+    `Generated ${esc(d.generated_at)} · ${d.summary.wiki_problems} problems cross-referenced from the frozen `
+    + `<a href="https://github.com/teorth/erdosproblems/wiki/AI-contributions-to-Erd%C5%91s-problems">AI-contributions wiki</a>`
+    + ` (2026-06-30) · proofs: formal-conjectures, plby / Jayyhk / williamjblair · feed: `
+    + `<a href="verdicts.json">verdicts.json</a> · method: `
+    + `<a href="https://github.com/williamjblair/erdos-fc-sync/tree/main/lean_assumptions">lean_assumptions</a>`;
   render();
 });
 
