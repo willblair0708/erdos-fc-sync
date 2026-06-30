@@ -17,7 +17,7 @@ import urllib.request
 import yaml
 
 
-UA = {"User-Agent": "erdos-fc-sync"}
+UA = {"User-Agent": "erdos-frontier"}
 TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
 CONJ_URL = "https://google-deepmind.github.io/formal-conjectures/data/conjectures.json"

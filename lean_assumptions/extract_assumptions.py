@@ -5,7 +5,7 @@ Vela L1 assumption-extractor harness, multi-repo / multi-toolchain.
   discover target theorem decls per Erdős problem (namespace + headline theorems)
   → generate a robust extract.lean (string-resolved decls, skips any missing)
   → run it in the repo's own built env → assumptions_<tag>.jsonl (one L1 record/thm)
-  → join with erdos-fc-sync status.json → audit_feed[_<tag>].json (one row/problem).
+  → join with erdos-frontier status.json → audit_feed[_<tag>].json (one row/problem).
 
 Each proof repo pins its own Lean toolchain and lives at its own root; the same
 metaprogram runs against each (it operates on decl-name strings, not Lean versions).

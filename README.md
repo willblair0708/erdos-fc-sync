@@ -1,9 +1,26 @@
-# erdos-fc-sync
+# erdos-frontier
 
-A **computed** source of truth for syncing solved-problem proofs into
-[Formal Conjectures](https://github.com/google-deepmind/formal-conjectures).
+A formal-proof fidelity audit over the Erdős frontier: **which "formally solved"
+problems rest on an unconditional Lean proof, and which silently assume an unproven
+result.** Live at [williamjblair.github.io/erdos-frontier](https://williamjblair.github.io/erdos-frontier/).
 
-## The problem: drift
+A proof can be `sorry`-free and `#print axioms`-clean and still prove the goal only
+*conditionally*, by taking a deep theorem as a hypothesis parameter the axiom check
+cannot see. This reads each hosted Lean proof mechanically and reports it, then:
+
+- **cross-references the frozen [AI-contributions wiki](https://github.com/teorth/erdosproblems/wiki/AI-contributions-to-Erd%C5%91s-problems)**
+  (retired 2026-06-30) to surface problems it records as a full solution where the proof
+  is actually conditional — the discrepancy view;
+- **cross-references [gpt-erdos](https://github.com/neelsomani/gpt-erdos)**, an independent
+  human classification of GPT-5.2 candidates, where the two reviews read different
+  artifacts and the divergences are the signal;
+- audits proofs across multiple Lean toolchains (plby 4.29.1, alphaproof-nexus 4.27.0)
+  via [`lean_assumptions/`](lean_assumptions/), keeping the strongest verdict per problem.
+
+The machine layer carries no human or model judgment; signed verdicts carry a named
+reviewer. The underlying FC↔erdos proof-status join (below) is what the audit sits on.
+
+## The proof-status join: drift
 
 An Erdős problem's "status" lives in several places that update independently:
 

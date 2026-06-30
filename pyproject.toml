@@ -1,7 +1,7 @@
 [project]
-name = "erdos-fc-sync"
+name = "erdos-frontier"
 version = "0.1.0"
-description = "Computed dashboard for syncing hosted Erdős Lean proofs into Formal Conjectures."
+description = "A formal-proof fidelity audit over the Erdős frontier: which 'solved' problems rest on an unconditional Lean proof, and which silently assume an unproven result."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
