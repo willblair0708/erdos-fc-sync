@@ -59,6 +59,7 @@ import ErdosProblems.Erdos224
 import ErdosProblems.Erdos226
 import ErdosProblems.Erdos229
 import ErdosProblems.Erdos237
+import ErdosProblems.Erdos24
 import ErdosProblems.Erdos246
 import ErdosProblems.Erdos258
 import ErdosProblems.Erdos259
@@ -71,6 +72,9 @@ import ErdosProblems.Erdos281
 import ErdosProblems.Erdos283b
 import ErdosProblems.Erdos290
 import ErdosProblems.Erdos291b
+import ErdosProblems.Erdos296
+import ErdosProblems.Erdos298
+import ErdosProblems.Erdos299
 import ErdosProblems.Erdos303
 import ErdosProblems.Erdos31
 import ErdosProblems.Erdos314
@@ -106,9 +110,12 @@ import ErdosProblems.Erdos434
 import ErdosProblems.Erdos435
 import ErdosProblems.Erdos443
 import ErdosProblems.Erdos447
+import ErdosProblems.Erdos45
 import ErdosProblems.Erdos453
 import ErdosProblems.Erdos457
 import ErdosProblems.Erdos459
+import ErdosProblems.Erdos46
+import ErdosProblems.Erdos47
 import ErdosProblems.Erdos476
 import ErdosProblems.Erdos481
 import ErdosProblems.Erdos484
@@ -278,6 +285,8 @@ def declNames : List String := [
   "Erdos229.erdos_229",
   "Erdos229.erdos_229",
   "Erdos237.erdos_237",
+  "Erdos24.erdos_pentagon_conjecture",
+  "Erdos24.erdos_pentagon_conjecture",
   "Erdos246.erdos_246",
   "Erdos258.erdos_258",
   "Erdos259.erdos_259",
@@ -295,6 +304,11 @@ def declNames : List String := [
   "Erdos290.main",
   "Erdos291b.z_ge_two",
   "Erdos291b.bla_nonzero",
+  "Erdos296.erdos296_upper_bound",
+  "Erdos296.bloom_quantitative",
+  "Erdos298.erdos298",
+  "Erdos298.erdos298_density",
+  "Erdos299.not_erdos299",
   "Erdos303.erdos_303",
   "Erdos31.erdos_31",
   "Erdos314.main_theorem",
@@ -344,9 +358,13 @@ def declNames : List String := [
   "Erdos443.erdos_443_part_one",
   "Erdos443.erdos_443_part_two",
   "Erdos447.erdos_447",
+  "Erdos45.erdos45",
   "Erdos453.not_erdos_453",
   "Erdos457.erdos_457",
   "Erdos459.main_theorem",
+  "Erdos46.erdos46",
+  "Erdos47.unit_fractions_upper_log_density",
+  "Erdos47.erdos47_bloom",
   "Erdos476.erdos_heilbronn_small",
   "Erdos476.erdos_476",
   "Erdos481.erdos_481",

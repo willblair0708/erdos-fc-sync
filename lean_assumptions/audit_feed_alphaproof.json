@@ -1,0 +1,107 @@
+[
+  {
+    "problem": 12,
+    "erdos_url": "https://www.erdosproblems.com/12",
+    "fc_status": "open",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos12.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos12.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 26,
+    "erdos_url": "https://www.erdosproblems.com/26",
+    "fc_status": "disproved (Lean)",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos26.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos26.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 125,
+    "erdos_url": "https://www.erdosproblems.com/125",
+    "fc_status": "disproved (Lean)",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos125.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos125.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 138,
+    "erdos_url": "https://www.erdosproblems.com/138",
+    "fc_status": "open",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos138.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos138.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 152,
+    "erdos_url": "https://www.erdosproblems.com/152",
+    "fc_status": "proved",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos152.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos152.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 741,
+    "erdos_url": "https://www.erdosproblems.com/741",
+    "fc_status": "solved (Lean)",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos741.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos741.target_theorem_0": "unconditional"
+    }
+  },
+  {
+    "problem": 846,
+    "erdos_url": "https://www.erdosproblems.com/846",
+    "fc_status": "disproved (Lean)",
+    "fc_bucket": "done",
+    "headline_decl": "Erdos846.target_theorem_0",
+    "machine_verdict": "unconditional",
+    "axiom_verdict": "kernel_clean",
+    "non_kernel_axioms": [],
+    "named_assumptions": [],
+    "preconditions": [],
+    "all_decls": {
+      "Erdos846.target_theorem_0": "unconditional"
+    }
+  }
+]

@@ -1,25 +1,54 @@
 #!/usr/bin/env python3
 """
-Vela L1 assumption-extractor harness over the plby fork corpus (Lean v4.29.1).
+Vela L1 assumption-extractor harness, multi-repo / multi-toolchain.
 
   discover target theorem decls per Erdős problem (namespace + headline theorems)
   → generate a robust extract.lean (string-resolved decls, skips any missing)
-  → run it in the fork's built env → assumptions.jsonl (one L1 record per theorem)
-  → join with erdos-fc-sync status.json → audit_feed.json (one row per problem).
+  → run it in the repo's own built env → assumptions_<tag>.jsonl (one L1 record/thm)
+  → join with erdos-fc-sync status.json → audit_feed[_<tag>].json (one row/problem).
 
-The machine layer (L0/L1) only. Verdicts are facts, not human judgment.
+Each proof repo pins its own Lean toolchain and lives at its own root; the same
+metaprogram runs against each (it operates on decl-name strings, not Lean versions).
+A repo's feed is tagged so fc_sync_status can merge feeds and keep the strongest
+verdict per problem. The machine layer (L0/L1) only — verdicts are facts, not human
+judgment.
+
+  python extract_assumptions.py --repo plby         # default; writes audit_feed.json
+  python extract_assumptions.py --repo alphaproof    # writes audit_feed_alphaproof.json
 """
-import json, re, subprocess, sys, pathlib
+import argparse
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+from collections import Counter
 
 HOME = pathlib.Path.home()
-import os
-FORK = pathlib.Path(os.environ.get("VELA_PROOF_REPO", str(HOME / "personal/lean-proofs-fork/src/v4.29.1")))
-ERDOS = FORK / "ErdosProblems"
 SP = pathlib.Path(__file__).resolve().parent
-EXTRACT = SP / "extract_all.lean"
-ASSUMPTIONS = SP / "assumptions.jsonl"
-FEED = SP / "audit_feed.json"
 STATUS = SP.parent / "status.json"
+
+# Per-repo config. `root` is the lake project (where `lake env lean` runs and
+# `.lake/build` lives); override with the env var for CI checkouts. `glob` finds
+# the Erdős problem files under it; `num_re` reads the problem number from the file
+# name; `keep` selects the headline theorem(s) in each file.
+REPOS = {
+    "plby": {
+        "root_env": "VELA_PROOF_REPO",
+        "root": HOME / "personal/lean-proofs-fork/src/v4.29.1",
+        "glob": "ErdosProblems/Erdos[0-9]*.lean",
+        "num_re": r"Erdos(\d+)",
+        "keep": ("erdos_", "main_theorem", "not_erdos"),
+    },
+    "alphaproof": {
+        "root_env": "VELA_PROOF_REPO_ALPHAPROOF",
+        "root": HOME / "personal/alphaproof-nexus-results",
+        "glob": "APNOutputs/ErdosProblems/erdos_[0-9]*.lean",
+        "num_re": r"erdos_(\d+)",
+        "keep": ("target_theorem", "erdos_"),
+    },
+}
 
 EXTRACT_TEMPLATE = r'''__IMPORTS__
 open Lean Elab Command Meta
@@ -72,14 +101,30 @@ run_cmd do
 '''
 
 
-OLEAN_DIR = FORK / ".lake/build/lib/lean/ErdosProblems"
+def module_of(file: pathlib.Path, root: pathlib.Path) -> str:
+    """Lean module name from the file's path relative to the lake root.
+
+    A path component that itself contains a dot (alphaproof names files like
+    ``erdos_12.parts.ii.lean``) must be guillemet-quoted, or Lean reads the dots as
+    module separators and looks for a nested ``erdos_12/parts/ii.olean`` that does
+    not exist.
+    """
+    parts = [f"«{p}»" if "." in p else p
+             for p in file.relative_to(root).with_suffix("").parts]
+    return ".".join(parts)
 
 
-def discover():
-    """problem_num → {module, namespace, decls, built}. Only headline theorems."""
-    by_num = {}
-    for f in sorted(ERDOS.glob("Erdos[0-9]*.lean")):
-        m = re.match(r"Erdos(\d+)", f.stem)
+def olean_of(file: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    rel = file.relative_to(root).with_suffix(".olean")
+    return root / ".lake/build/lib/lean" / rel
+
+
+def discover(cfg: dict, root: pathlib.Path) -> dict:
+    """problem_num → {module, decls, built}. Only headline theorems."""
+    num_re = re.compile(cfg["num_re"])
+    by_num: dict[int, dict] = {}
+    for f in sorted(root.glob(cfg["glob"])):
+        m = num_re.search(f.name)
         if not m:
             continue
         num = int(m.group(1))
@@ -87,45 +132,48 @@ def discover():
         nsm = re.search(r"^namespace (Erdos\d+\w*)", text, re.M)
         ns = nsm.group(1) if nsm else f.stem
         thms = re.findall(r"^theorem (\w+)", text, re.M)
-        keep = [t for t in thms if t.startswith(("erdos_", "main_theorem", "not_erdos"))]
+        keep = [t for t in thms if t.startswith(cfg["keep"])]
         if not keep:
             keep = thms[:2]
         if not keep:
             continue
+        # last file per problem number wins (e.g. Erdos1100b over Erdos1100), as
+        # before; cross-repo strongest-verdict merge lives in fc_sync_status.
         by_num[num] = {
-            "module": f"ErdosProblems.{f.stem}",
+            "module": [module_of(f, root)],
             "decls": [f"{ns}.{t}" for t in keep],
-            "built": (OLEAN_DIR / f"{f.stem}.olean").exists(),
+            "built": olean_of(f, root).exists(),
         }
     return by_num
 
 
-def gen_extract(by_num):
+def gen_extract(by_num: dict, extract_path: pathlib.Path):
     """Import only BUILT modules; audit only their decls (robust to partial build)."""
     built = {n: r for n, r in by_num.items() if r["built"]}
-    imports = "\n".join(f"import {r['module']}" for r in built.values())
+    modules = sorted({m for r in built.values() for m in r["module"]})
+    imports = "\n".join(f"import {m}" for m in modules)
     decls = [d for r in built.values() for d in r["decls"]]
     body = (EXTRACT_TEMPLATE
             .replace("__IMPORTS__", imports)
             .replace("__DECLS__", ",\n".join(f'  "{d}"' for d in decls)))
-    EXTRACT.write_text(body)
-    return len(built), len(decls)
+    extract_path.write_text(body)
+    return len(modules), len(decls)
 
 
-def run_extractor():
+def run_extractor(root: pathlib.Path, extract_path: pathlib.Path, out_jsonl: pathlib.Path):
     res = subprocess.run(
-        ["lake", "env", "lean", str(EXTRACT)],
-        cwd=str(FORK), capture_output=True, text=True,
+        ["lake", "env", "lean", str(extract_path)],
+        cwd=str(root), capture_output=True, text=True,
     )
     lines = [l for l in res.stdout.splitlines() if l.startswith("{")]
-    ASSUMPTIONS.write_text("\n".join(lines) + ("\n" if lines else ""))
+    out_jsonl.write_text("\n".join(lines) + ("\n" if lines else ""))
     if res.returncode != 0 and not lines:
         sys.stderr.write("EXTRACTOR FAILED:\n" + res.stderr[-3000:] + "\n")
     return [json.loads(l) for l in lines]
 
 
-def join_feed(records, by_num):
-    """One audit row per problem; pick the headline decl (erdos_<num> if present)."""
+def join_feed(records: list, by_num: dict, out_feed: pathlib.Path):
+    """One audit row per problem; pick the headline decl (erdos_<num> or target_theorem)."""
     status_rows = {}
     if STATUS.exists():
         s = json.load(open(STATUS))
@@ -137,8 +185,8 @@ def join_feed(records, by_num):
         recs = [by_decl[d] for d in info["decls"] if d in by_decl]
         if not recs:
             continue
-        # headline = the erdos_<num> decl if audited, else the most-conditional
-        headline = next((r for r in recs if r["decl"].endswith(f"erdos_{num}")), None)
+        headline = next(
+            (r for r in recs if r["decl"].endswith((f"erdos_{num}", "target_theorem_0"))), None)
         order = {"incomplete": 0, "conditional": 1, "unconditional": 2}
         if headline is None:
             headline = min(recs, key=lambda r: order.get(r["verdict"], 9))
@@ -157,31 +205,42 @@ def join_feed(records, by_num):
             "preconditions": headline["preconditions"],
             "all_decls": {r["decl"]: r["verdict"] for r in recs},
         })
-    json.dump(feed, open(FEED, "w"), indent=2)
+    json.dump(feed, open(out_feed, "w"), indent=2)
     return feed
 
 
 def main():
-    by_num = discover()
-    nmods, ndecls = gen_extract(by_num)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", choices=sorted(REPOS), default="plby")
+    ap.add_argument("--root", help="override the lake project root (else env/default)")
+    args = ap.parse_args()
+    cfg = REPOS[args.repo]
+    root = pathlib.Path(args.root or os.environ.get(cfg["root_env"], str(cfg["root"])))
+
+    # plby keeps the legacy output names so the committed feed is unchanged.
+    suffix = "" if args.repo == "plby" else f"_{args.repo}"
+    extract_path = SP / f"extract{suffix or '_all'}.lean"
+    out_jsonl = SP / f"assumptions{suffix}.jsonl"
+    out_feed = SP / f"audit_feed{suffix}.json"
+
+    if not root.exists():
+        sys.stderr.write(f"[{args.repo}] root not found: {root} — skipping\n")
+        return
+    by_num = discover(cfg, root)
+    nmods, ndecls = gen_extract(by_num, extract_path)
     nbuilt = sum(1 for r in by_num.values() if r["built"])
     sys.stderr.write(
-        f"discovered {len(by_num)} problems ({nbuilt} built); "
+        f"[{args.repo}] root={root}\n"
+        f"[{args.repo}] discovered {len(by_num)} problems ({nbuilt} built); "
         f"auditing {ndecls} decls across {nmods} built modules\n")
-    records = run_extractor()
-    sys.stderr.write(f"extracted {len(records)} L1 records\n")
-    feed = join_feed(records, by_num)
-    # summary
-    from collections import Counter
+    records = run_extractor(root, extract_path, out_jsonl)
+    sys.stderr.write(f"[{args.repo}] extracted {len(records)} L1 records\n")
+    feed = join_feed(records, by_num, out_feed)
     c = Counter(r["machine_verdict"] for r in feed)
-    sys.stderr.write(f"feed: {len(feed)} problems | verdicts: {dict(c)}\n")
-    axiomcond = [r for r in feed if r["non_kernel_axioms"]]
-    sys.stderr.write(f"axiom-conditional (#print axioms catches these): {len(axiomcond)} problems\n")
-    # the headline trap class: kernel-clean + sorry-free, yet conditional on a
-    # problem-defined named assumption — exactly what #print axioms cannot see.
+    sys.stderr.write(f"[{args.repo}] feed: {len(feed)} problems | verdicts: {dict(c)} -> {out_feed.name}\n")
     traps = [r for r in feed if r["machine_verdict"] == "conditional"
              and not r["non_kernel_axioms"] and r["named_assumptions"]]
-    sys.stderr.write(f"AXIOM-CLEAN-BUT-CONDITIONAL (the 678 trap class): {len(traps)} problems\n")
+    sys.stderr.write(f"[{args.repo}] axiom-clean-but-conditional (678 trap class): {len(traps)}\n")
     for r in sorted(traps, key=lambda r: r["problem"]):
         sys.stderr.write(f"  #{r['problem']:>5}  {r['headline_decl']:38} {r['named_assumptions']}\n")
 

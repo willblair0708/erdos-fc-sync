@@ -241,21 +241,43 @@ def build_proofs(
     return proofs
 
 
-LEAN_AUDIT_PATH = Path(__file__).resolve().parent / "lean_assumptions" / "audit_feed.json"
+LEAN_AUDIT_DIR = Path(__file__).resolve().parent / "lean_assumptions"
+_VERDICT_RANK = {"unconditional": 2, "conditional": 1, "incomplete": 0}
 
 
-def load_machine_audit(path: Path = LEAN_AUDIT_PATH) -> dict[int, dict]:
-    """Machine L1 verdicts from the Lean assumption-extractor, keyed by problem.
+def _audit_tag(path: Path) -> str:
+    """audit_feed_<tag>.json -> <tag>; the legacy audit_feed.json -> plby."""
+    stem = path.stem
+    return stem[len("audit_feed_"):] if stem.startswith("audit_feed_") else "plby"
 
-    The deterministic, repo-local result of actually loading each hosted proof and
-    reading its axioms + theorem-parameter hypotheses — not a flag the proof author
-    declared. Empty if the audit has not been generated.
+
+def load_machine_audit(audit_dir: Path = LEAN_AUDIT_DIR) -> dict[int, dict]:
+    """Merge every ``audit_feed*.json`` (one per proof repo) keyed by problem.
+
+    Each repo's harness writes ``audit_feed_<tag>.json`` — the deterministic result
+    of loading its hosted proofs and reading their axioms + theorem-parameter
+    hypotheses, not a flag the author declared. A problem can be proven in more than
+    one repo; we keep the STRONGEST verdict (unconditional > conditional > incomplete)
+    so an unconditional proof in any audited repo settles it, and record which feed
+    it came from. Empty if no audit has been generated.
     """
-    try:
-        rows = json.load(open(path))
-    except (OSError, ValueError):
-        return {}
-    return {int(r["problem"]): r for r in rows if "problem" in r}
+    merged: dict[int, dict] = {}
+    for path in sorted(Path(audit_dir).glob("audit_feed*.json")):
+        tag = _audit_tag(path)
+        try:
+            rows = json.load(open(path))
+        except (OSError, ValueError):
+            continue
+        for raw in rows:
+            if "problem" not in raw:
+                continue
+            problem = int(raw["problem"])
+            rec = {**raw, "source": tag}
+            cur = merged.get(problem)
+            if cur is None or (_VERDICT_RANK.get(rec.get("machine_verdict"), -1)
+                               > _VERDICT_RANK.get(cur.get("machine_verdict"), -1)):
+                merged[problem] = rec
+    return merged
 
 
 def apply_machine_audit(proofs: dict[int, dict], audit: dict[int, dict]) -> None:
@@ -272,6 +294,7 @@ def apply_machine_audit(proofs: dict[int, dict], audit: dict[int, dict]) -> None
             continue
         verdict = feed.get("machine_verdict")
         rec["machine_verdict"] = verdict
+        rec["machine_source"] = feed.get("source")
         rec["machine_named_assumptions"] = feed.get("named_assumptions") or []
         rec["machine_non_kernel_axioms"] = feed.get("non_kernel_axioms") or []
         if verdict == "conditional":
@@ -526,6 +549,44 @@ def load_overrides(path: str | Path = "overrides.yaml") -> dict[int, dict]:
     return overrides
 
 
+# High-profile, widely-cited AI-solved proofs (DeepMind AlphaProof's set + the
+# Aristotle/GPT trio). A mechanical conditional/incomplete flag on one of these is
+# either a real and important catch or a false positive that would be costly to
+# publish wrong — so it is HELD for a human to confirm before it reaches the public
+# feed, rather than auto-published. Verified-clear problems live in staging_cleared.yaml.
+CELEBRATED_PROBLEMS = frozenset({12, 26, 125, 138, 152, 741, 846, 397, 728, 729})
+
+
+def load_staging_cleared(path: str | Path = "staging_cleared.yaml") -> set[int]:
+    """Problem numbers whose celebrated-proof flag a human has hand-verified, so it
+    may publish. Empty (every celebrated flag held) if the file is absent."""
+    p = Path(path)
+    if not p.exists():
+        return set()
+    raw = yaml.safe_load(p.read_text()) or {}
+    return {int(x) for x in (raw.get("cleared") or [])}
+
+
+def apply_staging_gate(rows: list[dict], cleared: set[int]) -> list[int]:
+    """Hold any conditional/incomplete flag on a celebrated proof until cleared.
+
+    Sets ``held_for_review`` on every row and suppresses ``discrepancy`` for a held
+    one, so a false positive on a Tao-accepted proof never auto-publishes. Returns
+    the sorted list of held problem numbers.
+    """
+    held: list[int] = []
+    for row in rows:
+        verdict = (row.get("machine") or {}).get("verdict")
+        gated = (row["problem"] in CELEBRATED_PROBLEMS
+                 and verdict in ("conditional", "incomplete")
+                 and row["problem"] not in cleared)
+        row["held_for_review"] = gated
+        if gated:
+            row["discrepancy"] = False
+            held.append(row["problem"])
+    return sorted(held)
+
+
 def source_names(proof: dict | None) -> list[str]:
     if not proof:
         return []
@@ -679,6 +740,7 @@ def row_for_problem(
         "machine": (
             {
                 "verdict": proof.get("machine_verdict"),
+                "source": proof.get("machine_source"),
                 "named_assumptions": proof.get("machine_named_assumptions") or [],
                 "non_kernel_axioms": proof.get("machine_non_kernel_axioms") or [],
             }
@@ -699,6 +761,7 @@ def build_status(
     overrides: dict[int, dict],
     fidelity: dict[int, dict] | None = None,
     wiki: dict[int, dict] | None = None,
+    cleared: set[int] | None = None,
     generated_at: str | None = None,
 ) -> dict:
     generated_at = generated_at or _datetime.date.today().isoformat()
@@ -717,6 +780,7 @@ def build_status(
         )
         for problem in sorted(erdos)
     ]
+    held_for_review = apply_staging_gate(rows, cleared or set())
     counts = Counter(row["bucket"] for row in rows)
     bloom_formalized = {
         problem
@@ -742,6 +806,7 @@ def build_status(
         "hosted_proofs_tracked": len(proofs),
         "wiki_problems_tracked": len(wiki),
         "discrepancies": sorted(r["problem"] for r in rows if r.get("discrepancy")),
+        "held_for_review": held_for_review,
         "bloom_formalized_count": len(bloom_formalized),
         "coverage_gap": coverage_gap,
         "rows": rows,
@@ -926,6 +991,7 @@ def render_verdicts_feed(payload: dict) -> dict:
             "fc_linked": bool((r.get("fc") or {}).get("linked")),
             "bucket": r["bucket"],
             "machine_verdict": machine.get("verdict"),
+            "machine_source": machine.get("source"),
             "named_assumptions": machine.get("named_assumptions") or [],
             "non_kernel_axioms": machine.get("non_kernel_axioms") or [],
             # the frozen-wiki claim this row is a superset of (None if absent).
@@ -937,6 +1003,8 @@ def render_verdicts_feed(payload: dict) -> dict:
             "wiki_claims_lean": bool(wiki.get("claims_lean")),
             # wiki says solved; the available formal proof is conditional/incomplete.
             "discrepancy": bool(r.get("discrepancy")),
+            # a flag on a celebrated proof, held for human review (not auto-published).
+            "held_for_review": bool(r.get("held_for_review")),
             "signed_fidelity_verdict": fidelity.get("verdict"),
             "signed_by": fidelity.get("reviewer") if fidelity.get("signed") else None,
             "recommended_action": r.get("recommended_action"),
@@ -955,6 +1023,7 @@ def render_verdicts_feed(payload: dict) -> dict:
                 if r["named_assumptions"] and not r["non_kernel_axioms"]
             ],
             "discrepancies": [r["problem"] for r in rows if r["discrepancy"]],
+            "held_for_review": [r["problem"] for r in rows if r["held_for_review"]],
         },
         "rows": rows,
     }
@@ -984,6 +1053,7 @@ def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
     overrides = load_overrides(overrides_path)
     fidelity = load_fidelity(FIDELITY_URL)
     wiki = load_wiki_registry()
+    cleared = load_staging_cleared()
     for problem in fetch_wontfix():
         overrides.setdefault(
             problem,
@@ -1002,6 +1072,7 @@ def load_live_status(overrides_path: str | Path = "overrides.yaml") -> dict:
         overrides=overrides,
         fidelity=fidelity,
         wiki=wiki,
+        cleared=cleared,
     )
 
 

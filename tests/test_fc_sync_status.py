@@ -8,6 +8,7 @@ from fc_sync_status import (
     build_status,
     classify,
     load_fidelity,
+    load_machine_audit,
     load_wiki_registry,
     parse_fidelity,
     render_next_batch_md,
@@ -378,3 +379,61 @@ def test_load_wiki_registry_reads_committed_snapshot():
     assert 728 in reg
     assert reg[728]["claims_full_solution"] is True
     assert reg[728]["claims_lean"] is True
+
+
+def test_machine_audit_merges_repo_feeds_keeping_strongest_verdict(tmp_path):
+    # Two proof repos audit #12; an unconditional proof in one settles it over a
+    # conditional proof in the other. The legacy audit_feed.json is tagged plby.
+    (tmp_path / "audit_feed.json").write_text(json.dumps([
+        {"problem": 12, "machine_verdict": "conditional",
+         "named_assumptions": ["h : Erdos12.Hyp"], "non_kernel_axioms": []},
+        {"problem": 99, "machine_verdict": "incomplete",
+         "named_assumptions": [], "non_kernel_axioms": []},
+    ]))
+    (tmp_path / "audit_feed_alphaproof.json").write_text(json.dumps([
+        {"problem": 12, "machine_verdict": "unconditional",
+         "named_assumptions": [], "non_kernel_axioms": []},
+    ]))
+
+    merged = load_machine_audit(tmp_path)
+
+    assert merged[12]["machine_verdict"] == "unconditional"  # strongest wins
+    assert merged[12]["source"] == "alphaproof"
+    assert merged[99]["source"] == "plby"                    # legacy file -> plby
+
+
+def test_staging_gate_holds_a_celebrated_proof_flag_until_cleared():
+    # A conditional flag on a celebrated proof (#728) must NOT auto-publish: a false
+    # positive on a Tao-accepted proof is costly. It is held for human review.
+    proof = machine_conditional_proof(728, named=["h : Erdos728.Hyp"])
+    payload, row = status_for(728, proof=proof, wiki=_wiki_summary(WIKI_FULL_LEAN))
+
+    assert row["held_for_review"] is True
+    assert row["discrepancy"] is False                       # suppressed while held
+    assert 728 in payload["held_for_review"]
+
+    feed = render_verdicts_feed(payload)
+    assert 728 in feed["summary"]["held_for_review"]
+    assert 728 not in feed["summary"]["discrepancies"]
+
+
+def test_staging_gate_releases_a_cleared_celebrated_flag():
+    proof = machine_conditional_proof(728, named=["h : Erdos728.Hyp"])
+    payload = build_status(
+        erdos=erdos_records(728), fc={}, proofs={728: proof},
+        claims_by_problem={}, claims_available=True, overrides={},
+        wiki={728: _wiki_summary(WIKI_FULL_LEAN)}, cleared={728},
+        generated_at="2026-06-30")
+    row = payload["rows"][0]
+
+    assert row["held_for_review"] is False
+    assert row["discrepancy"] is True                        # cleared -> publishes
+
+
+def test_non_celebrated_conditional_flag_is_not_held():
+    # The gate only applies to the celebrated set; ordinary flags publish as usual.
+    proof = machine_conditional_proof(1148, named=["h : Erdos1148.DukeTheoremStatement"])
+    _, row = status_for(1148, proof=proof, wiki=_wiki_summary(WIKI_FULL_LEAN))
+
+    assert row["held_for_review"] is False
+    assert row["discrepancy"] is True
