@@ -258,8 +258,12 @@ def draft_verdict_stub(problem: int) -> dict:
     ddir = DRAFT_DIR / str(problem)
     draft = json.loads((ddir / "draft.json").read_text())
     lean_bytes = (ddir / f"{problem}.lean").read_bytes()
+    # `problem` is a convenience field for scripts/sign-batch.sh, which creates
+    # the finding, fills `target` with the vf_ id, strips the extra field, and
+    # hands vela a bare JSON array (the shape `vela attest --batch` parses).
     return {
-        "target": None,
+        "problem": problem,
+        "target": "",
         "verdict": "",
         "informal_ref": f"erdosproblems.com/{problem}",
         "formal_ref": f"campaign-draft:statements/{problem}/{problem}.lean",
@@ -290,11 +294,12 @@ def draft_main(problems: list[int]) -> int:
         stubs.append(draft_verdict_stub(n))
         print(f"wrote {path}")
     if stubs:
-        stub_path = DRAFT_PACKET_DIR / "verdicts_stub.jsonl"
-        stub_path.write_text("\n".join(json.dumps(s) for s in stubs) + "\n")
-        print(f"wrote {stub_path} ({len(stubs)} rows) — fill verdict+target, then "
-              "`vela attest . --batch packets/draft-review/verdicts_stub.jsonl "
-              "--as reviewer:will-blair`")
+        stub_path = DRAFT_PACKET_DIR / "verdicts_stub.json"
+        stub_path.write_text(json.dumps(stubs, indent=2) + "\n")
+        print(f"wrote {stub_path} ({len(stubs)} rows) — fill each \"verdict\" "
+              "(faithful/variant/unfaithful) after reading the packets, then run "
+              "`bash scripts/sign-batch.sh` (it creates the findings, fills the "
+              "targets, and signs the batch under your key in one pass)")
     return 0
 
 
