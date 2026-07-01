@@ -506,8 +506,12 @@ def load_fidelity(url_or_path: str | Path = FIDELITY_URL) -> dict[int, dict]:
     if re.match(r"^https?://", target):
         try:
             return parse_fidelity(load_json_url(target), source="hub")
-        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
-            pass
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as exc:
+            # Fall back to the offline cache, but do not fail silently: the
+            # verdicts are still shown, tagged `source: cache`, and the site can
+            # say "offline snapshot". Operators see the outage in the CI log.
+            import sys
+            sys.stderr.write(f"WARNING: fidelity hub unreachable ({exc}); using offline cache\n")
     else:
         # An explicit local path was requested; treat it as last-known-good cache.
         cache_path = Path(target)
