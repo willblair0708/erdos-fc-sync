@@ -39,7 +39,9 @@ To sign a new statement-fidelity verdict (a reviewer key, never an agent):
 bash scripts/sign-fidelity.sh <problem> <faithful|variant|unfaithful> "<note>" --sign
 ```
 
-See [VISION.md](VISION.md) for the two layers and the trust rule.
+See [VISION.md](VISION.md) for the two layers and the trust rule, and
+[CONTRIBUTING.md](CONTRIBUTING.md) for the two ways to contribute (host a proof
+the audit reads, or fork and propose a finding a maintainer accepts).
 
 ## The proof-status join: drift
 
