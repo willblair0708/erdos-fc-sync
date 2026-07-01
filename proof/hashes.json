@@ -5,6 +5,6 @@
   "proposal_state_hash": "sha256:de3795e65acd2404417fc4b665da09069c68bef167190976dc53edd54602c0d1",
   "review_hash": "sha256:bb74af13f787e6f1357d243a3ff50e8efea86aaa7bc83c5291ab04afd0533ace",
   "schema": "vela.frontier_repo_hashes.v0.1",
-  "snapshot_hash": "sha256:7fa322a681cae90d6d6d956ca869858c6a01324e61807de5ba1c00061fabed52",
+  "snapshot_hash": "sha256:3d9186371cf9c4a05678e237b77a23609ab6a68bac61a6ccd21950e364ed373d",
   "sources_hash": "sha256:32f6ebeb61142df1d7f180a0c31d0f0c12f3ef1adee6a73d1d3878a5d07f9e93"
 }
