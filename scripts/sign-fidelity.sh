@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Sign one statement-faithfulness verdict (`vsa_`) into this frontier — the
 # git-native home of the Erdős fidelity frontier (vfr_0a25edabc16db143). It adds
-# a finding for the problem and attests the reviewer's verdict on whether the
+# a finding for the problem and signs the reviewer's verdict on whether the
 # Formal Conjectures statement faithfully encodes the informal Erdős problem.
 #
-# KEY CUSTODY: only a human reviewer can sign. `vela attest --verdict` reserves
+# KEY CUSTODY: only a human reviewer can sign. `vela review --fidelity` reserves
 # the `vsa_` for `reviewer:` actors and rejects any `agent:` actor — an AI can
 # never forge a fidelity judgment. Run this yourself, with your key.
 #
@@ -55,7 +55,7 @@ VF=$("$VELA" finding add "$HERE" \
       --author "$REVIEWER" --apply --json | grep -oE 'vf_[0-9a-f]+' | head -1)
 [ -n "$VF" ] || { echo "failed to add finding" >&2; exit 1; }
 
-"$VELA" attest "$HERE" "$VF" --verdict "$VERDICT" \
+"$VELA" review "$HERE" "$VF" --fidelity "$VERDICT" \
   --informal-ref "erdosproblems.com/$N" --formal-ref "$FORMAL_REF" \
   --formal-statement-hash "$HASH" --note "$NOTE" --as "$REVIEWER" "${KEYARG[@]}"
 
